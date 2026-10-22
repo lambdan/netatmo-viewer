@@ -2,53 +2,50 @@ import { serveDir } from "@std/http/file-server";
 import type { WeatherData } from "../shared/types.ts";
 import { Netatmo } from "./netatmo.ts";
 import { demoData } from "./demo.ts";
+import { Archive } from "./db.ts";
+import { Sync } from "./sync.ts";
 
 const env = (k: string) => Deno.env.get(k) || undefined;
 
 const PORT = Number(env("PORT") ?? 8080);
 // Netatmo stations upload every ~10 minutes, so polling more often than this is pointless.
 const POLL_MS = Math.max(60, Number(env("POLL_SECONDS") ?? 300)) * 1000;
-const HISTORY_MS = 15 * 60 * 1000;
 const STATIC_DIR = env("STATIC_DIR") ?? "./dist";
 const DEMO = env("DEMO") === "1" || !env("NETATMO_CLIENT_ID");
+
+const DATA_DIR = env("DATA_DIR") ?? "./data";
 
 const netatmo = DEMO ? undefined : new Netatmo({
   clientId: env("NETATMO_CLIENT_ID")!,
   clientSecret: env("NETATMO_CLIENT_SECRET") ?? "",
   initialRefreshToken: env("NETATMO_REFRESH_TOKEN"),
-  dataDir: env("DATA_DIR") ?? "./data",
+  dataDir: DATA_DIR,
 });
 
+let archive: Archive | undefined;
+if (netatmo) {
+  await Deno.mkdir(DATA_DIR, { recursive: true });
+  archive = new Archive(`${DATA_DIR}/netatmo.sqlite`);
+}
+const sync = netatmo && archive ? new Sync(netatmo, archive) : undefined;
+
 let cache: WeatherData | undefined;
-let history = new Map<string, [number, number][]>();
-let historyFetchedAt = 0;
 let inflight: Promise<void> | undefined;
 
 async function poll() {
-  if (!netatmo) {
+  if (!netatmo || !archive || !sync) {
     cache = demoData();
     return;
   }
   try {
-    const data = await netatmo.stations();
-    const baseId = data.modules[0].id;
+    const { data, setupAt } = await netatmo.stations();
+    await sync.update(data.modules, setupAt);
 
-    if (Date.now() - historyFetchedAt > HISTORY_MS) {
-      const next = new Map<string, [number, number][]>();
-      for (const m of data.modules) {
-        if (m.temperature === undefined) continue;
-        try {
-          next.set(m.id, await netatmo.history(baseId, m.id === baseId ? undefined : m.id));
-        } catch (e) {
-          console.warn(`history for ${m.name} failed:`, (e as Error).message);
-          const old = history.get(m.id);
-          if (old) next.set(m.id, old);
-        }
-      }
-      history = next;
-      historyFetchedAt = Date.now();
+    // The 24h chart comes from the local archive, in 30 minute buckets.
+    const since = Math.floor(Date.now() / 1000) - 24 * 3600;
+    for (const m of data.modules) {
+      if (m.temperature !== undefined) m.history = archive.temperatureHistory(m.id, since, 1800);
     }
-    for (const m of data.modules) m.history = history.get(m.id);
 
     cache = data;
   } catch (e) {
@@ -78,6 +75,9 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   if (pathname === "/api/weather") {
     if (!cache) await refresh();
     return Response.json(cache, { headers: { "Cache-Control": "no-store" } });
+  }
+  if (pathname === "/api/archive") {
+    return Response.json(archive?.stats() ?? [], { headers: { "Cache-Control": "no-store" } });
   }
   if (pathname === "/healthz") return new Response("ok");
 

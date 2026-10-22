@@ -1,4 +1,4 @@
-// Minimal Netatmo Connect client: token refresh + station data + temperature history.
+// Minimal Netatmo Connect client: token refresh + station data + raw measurements.
 // https://dev.netatmo.com/apidocumentation/weather
 
 import type { Module, ModuleKind, Trend, WeatherData } from "../shared/types.ts";
@@ -28,6 +28,7 @@ class NetatmoError extends Error {
 export class Netatmo {
   #tokens?: Tokens;
   #tokenFile: string;
+  #refreshing?: Promise<Tokens>;
 
   constructor(private config: NetatmoConfig) {
     this.#tokenFile = `${config.dataDir}/tokens.json`;
@@ -82,19 +83,28 @@ export class Netatmo {
   }
 
   async #accessToken(forceRefresh = false): Promise<string> {
-    let tokens = await this.#loadTokens();
+    // Polling and the backfill run concurrently; make them share a single refresh.
+    if (this.#refreshing) return (await this.#refreshing).accessToken;
+    const tokens = await this.#loadTokens();
     if (forceRefresh || Date.now() >= tokens.expiresAt) {
-      const fallback = this.config.initialRefreshToken;
-      try {
-        tokens = await this.#refresh(tokens.refreshToken);
-      } catch (e) {
-        // A stored token that no longer works can be replaced by putting a new one in the env.
-        if (!fallback || fallback === tokens.refreshToken) throw e;
-        console.warn("Stored refresh token rejected, trying NETATMO_REFRESH_TOKEN");
-        tokens = await this.#refresh(fallback);
-      }
+      this.#refreshing = this.#refreshWithFallback(tokens).finally(() => {
+        this.#refreshing = undefined;
+      });
+      return (await this.#refreshing).accessToken;
     }
     return tokens.accessToken;
+  }
+
+  async #refreshWithFallback(tokens: Tokens): Promise<Tokens> {
+    const fallback = this.config.initialRefreshToken;
+    try {
+      return await this.#refresh(tokens.refreshToken);
+    } catch (e) {
+      // A stored token that no longer works can be replaced by putting a new one in the env.
+      if (!fallback || fallback === tokens.refreshToken) throw e;
+      console.warn("Stored refresh token rejected, trying NETATMO_REFRESH_TOKEN");
+      return await this.#refresh(fallback);
+    }
   }
 
   // deno-lint-ignore no-explicit-any
@@ -113,7 +123,8 @@ export class Netatmo {
     return json.body;
   }
 
-  async stations(): Promise<WeatherData> {
+  /** Current readings, plus when the station was set up (unix seconds). */
+  async stations(): Promise<{ data: WeatherData; setupAt?: number }> {
     const body = await this.#get("/api/getstationsdata");
     const device = body.devices?.[0];
     if (!device) throw new Error("No weather station found on this account");
@@ -126,27 +137,44 @@ export class Netatmo {
     modules[0].reachable = device.reachable !== false;
 
     return {
-      stationName: device.home_name ?? device.station_name ?? "Weather",
-      fetchedAt: Date.now(),
-      modules,
+      data: {
+        stationName: device.home_name ?? device.station_name ?? "Weather",
+        fetchedAt: Date.now(),
+        modules,
+      },
+      setupAt: device.date_setup,
     };
   }
 
-  /** Last 24h of temperature, 30 min resolution. */
-  async history(deviceId: string, moduleId?: string): Promise<[number, number][]> {
+  /** Raw measurements at full resolution (~5 min), oldest first, at most `limit` points. */
+  async measure(q: {
+    deviceId: string;
+    /** Omit for the base station itself. */
+    moduleId?: string;
+    types: string[];
+    begin: number;
+    end: number;
+    limit: number;
+  }): Promise<[number, (number | null)[]][]> {
     const params: Record<string, string> = {
-      device_id: deviceId,
-      scale: "30min",
-      type: "temperature",
-      date_begin: String(Math.floor(Date.now() / 1000) - 24 * 3600),
+      device_id: q.deviceId,
+      scale: "max",
+      type: q.types.join(","),
+      date_begin: String(q.begin),
+      date_end: String(q.end),
+      limit: String(q.limit),
       optimize: "false",
       real_time: "true",
     };
-    if (moduleId) params.module_id = moduleId;
+    if (q.moduleId) params.module_id = q.moduleId;
     const body = await this.#get("/api/getmeasure", params);
     return Object.entries(body ?? {})
-      .map(([t, v]) => [Number(t), (v as number[])[0]] as [number, number])
-      .filter(([, v]) => typeof v === "number")
+      .map(([t, v]) =>
+        [Number(t), (v as (number | null)[]).map((x) => x ?? null)] as [
+          number,
+          (number | null)[],
+        ]
+      )
       .sort((a, b) => a[0] - b[0]);
   }
 }

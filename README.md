@@ -52,6 +52,28 @@ setup before doing the Netatmo part.
 | `PORT`                   | `8080`   |                                        |
 | `DEMO`                   |          | `1` = fake data                        |
 
+## Local archive
+
+Every measurement is also stored in a SQLite database at `/data/netatmo.sqlite` (the same volume as
+the token), so you keep your history even if Netatmo goes down or starts charging for it.
+
+- New readings (about every 5 minutes) are synced on each poll. After downtime, the server catches
+  up on what it missed when it starts again.
+- On first start, a background job copies **all** history back to the day the station was set up.
+  It's throttled to stay well under Netatmo's rate limit, so a station that's a few years old takes
+  several hours. It continues where it left off after a restart.
+- `http://<server-ip>:8080/api/archive` shows rows, oldest/newest timestamp and backfill status per module.
+- The 24h charts are drawn from the archive, so they keep working when Netatmo is unreachable.
+
+Tables: `measurements` (one row per module and timestamp; temperature, humidity, co2,
+pressure, noise, plus rain/wind columns), `modules` (names), `sync_state` (sync progress).
+To take a consistent copy while it's running:
+
+```sh
+docker exec -u deno netatmo-viewer deno eval "import { DatabaseSync } from 'node:sqlite'; new DatabaseSync('/data/netatmo.sqlite').exec(\"VACUUM INTO '/data/backup.sqlite'\")"
+docker cp netatmo-viewer:/data/backup.sqlite .
+```
+
 ## 3. iPad setup
 
 - In Safari: open the page → Share → **Add to Home Screen**. Launched from there, it runs
