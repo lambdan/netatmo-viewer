@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import type { WeatherData } from "../shared/types.ts";
 import { ago, clockTime, dateLine } from "./format.ts";
 import ModuleCard from "./components/ModuleCard.vue";
+import HistoryView from "./components/HistoryView.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { isLight, lightAt, themeSettings } from "./theme.ts";
 
@@ -41,6 +42,21 @@ const status = computed(() => {
 
 const showSettings = ref(false);
 
+// "#history" keeps the history view open across the periodic reloads.
+const view = ref<"now" | "history">(location.hash === "#history" ? "history" : "now");
+const historyModule = ref<string>();
+
+function openHistory(moduleId?: string) {
+  historyModule.value = moduleId;
+  view.value = "history";
+  history.replaceState(null, "", "#history");
+}
+
+function closeHistory() {
+  view.value = "now";
+  history.replaceState(null, "", location.pathname);
+}
+
 // Light theme during the day, dark at night, unless forced in the settings panel.
 watchEffect(() => {
   isLight.value = lightAt(now.value, themeSettings);
@@ -66,11 +82,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app">
+  <HistoryView
+    v-if="view === 'history' && data && data.modules.length"
+    :modules="data.modules"
+    :initial-module="historyModule"
+    @close="closeHistory"
+  />
+  <div v-else class="app">
     <header class="top">
       <div class="station">
         <button class="gear" aria-label="Settings" @click="showSettings = true">⚙&#xFE0E;</button>
         {{ data?.stationName }}
+        <button v-if="data?.modules.length" class="link" @click="openHistory()">History ›</button>
       </div>
       <div class="clock">
         <span class="date">{{ dateLine(now) }}</span>
@@ -79,9 +102,15 @@ onUnmounted(() => {
     </header>
 
     <main class="grid" :class="{ single: !outdoor }" v-if="data && data.modules.length">
-      <ModuleCard v-if="outdoor" :module="outdoor" hero class="hero-card" />
+      <ModuleCard
+        v-if="outdoor"
+        :module="outdoor"
+        hero
+        class="hero-card"
+        @click="openHistory(outdoor.id)"
+      />
       <div class="side">
-        <ModuleCard v-for="m in others" :key="m.id" :module="m" />
+        <ModuleCard v-for="m in others" :key="m.id" :module="m" @click="openHistory(m.id)" />
       </div>
     </main>
     <main v-else class="empty">{{ status.text }}</main>
@@ -126,6 +155,19 @@ onUnmounted(() => {
   color: var(--muted);
   font: inherit;
   font-size: 22px;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+.link {
+  margin-left: 18px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
   -webkit-appearance: none;
 }

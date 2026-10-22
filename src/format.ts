@@ -71,3 +71,29 @@ const compass = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 export function direction(deg?: number): string {
   return deg === undefined ? "" : compass[Math.round(deg / 45) % 8];
 }
+
+const numberFormats = new Map<number, Intl.NumberFormat>();
+/** Locale formatted number with a fixed number of decimals. */
+export function fixed(v: number | undefined, decimals: number): string {
+  if (v === undefined) return "–";
+  let f = numberFormats.get(decimals);
+  if (!f) {
+    f = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+    numberFormats.set(decimals, f);
+  }
+  return f.format(v);
+}
+
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+export function fmtDate(unixSeconds: number, opts: Intl.DateTimeFormatOptions): string {
+  const key = JSON.stringify(opts);
+  let f = dateFormats.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, { hour12: false, ...opts });
+    dateFormats.set(key, f);
+  }
+  return f.format(new Date(unixSeconds * 1000));
+}

@@ -5,13 +5,16 @@
     "dev:server": "deno run --allow-net --allow-env --allow-read --allow-write --watch server/main.ts",
     "build": "deno run -A npm:vite build",
     "start": "deno run --allow-net --allow-env --allow-read --allow-write server/main.ts",
-    "check": "deno check server/main.ts"
+    "check": "deno check server/main.ts",
+    "typecheck": "deno run -A npm:vue-tsc --noEmit -p tsconfig.json"
   },
   "imports": {
     "vue": "npm:vue@^3.5.44",
     "vite": "npm:vite@^8.3.5",
     "@vitejs/plugin-vue": "npm:@vitejs/plugin-vue@^6.0.10",
-    "@std/http": "jsr:@std/http@^1"
+    "@std/http": "jsr:@std/http@^1",
+    "typescript": "npm:typescript@~5.9.3",
+    "vue-tsc": "npm:vue-tsc@^3.3.13"
   },
   "compilerOptions": {
     "lib": [

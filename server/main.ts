@@ -1,8 +1,13 @@
 import { serveDir } from "@std/http/file-server";
-import type { WeatherData } from "../shared/types.ts";
+import type {
+  MonthlyResponse,
+  RecordsResponse,
+  SeriesResponse,
+  WeatherData,
+} from "../shared/types.ts";
 import { Netatmo } from "./netatmo.ts";
-import { demoData } from "./demo.ts";
-import { Archive } from "./db.ts";
+import { demoData, seedDemoArchive } from "./demo.ts";
+import { Archive, isMetric } from "./db.ts";
 import { Sync } from "./sync.ts";
 
 const env = (k: string) => Deno.env.get(k) || undefined;
@@ -22,18 +27,21 @@ const netatmo = DEMO ? undefined : new Netatmo({
   dataDir: DATA_DIR,
 });
 
-let archive: Archive | undefined;
+let archive: Archive;
 if (netatmo) {
   await Deno.mkdir(DATA_DIR, { recursive: true });
   archive = new Archive(`${DATA_DIR}/netatmo.sqlite`);
+} else {
+  archive = new Archive(":memory:");
+  seedDemoArchive(archive);
 }
-const sync = netatmo && archive ? new Sync(netatmo, archive) : undefined;
+const sync = netatmo ? new Sync(netatmo, archive) : undefined;
 
 let cache: WeatherData | undefined;
 let inflight: Promise<void> | undefined;
 
 async function poll() {
-  if (!netatmo || !archive || !sync) {
+  if (!netatmo || !sync) {
     cache = demoData();
     return;
   }
@@ -65,6 +73,10 @@ function refresh(): Promise<void> {
 refresh();
 setInterval(refresh, POLL_MS);
 
+function json(body: unknown) {
+  return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+}
+
 console.log(
   `netatmo-viewer on http://0.0.0.0:${PORT} (${DEMO ? "demo data" : "live Netatmo data"})`,
 );
@@ -76,8 +88,37 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
     if (!cache) await refresh();
     return Response.json(cache, { headers: { "Cache-Control": "no-store" } });
   }
-  if (pathname === "/api/archive") {
-    return Response.json(archive?.stats() ?? [], { headers: { "Cache-Control": "no-store" } });
+  if (pathname === "/api/archive") return json(archive.stats());
+  if (pathname.startsWith("/api/")) {
+    const q = new URL(req.url).searchParams;
+    const moduleId = q.get("module") ?? "";
+    const metric = q.get("metric");
+    if (!isMetric(metric)) return new Response("bad metric", { status: 400 });
+    const num = (k: string) => Number(q.get(k) ?? 0) || 0;
+
+    if (pathname === "/api/history") {
+      const body: SeriesResponse = {
+        points: archive.series(moduleId, metric, num("from"), num("to"), num("bucket"), num("tz")),
+      };
+      return json(body);
+    }
+    if (pathname === "/api/records") {
+      const body: RecordsResponse = {
+        since: archive.oldest(moduleId),
+        complete: !netatmo || archive.state(moduleId).backfillDone,
+        periods: {
+          today: archive.extremes(moduleId, metric, num("today")),
+          month: archive.extremes(moduleId, metric, num("month")),
+          year: archive.extremes(moduleId, metric, num("year")),
+          all: archive.extremes(moduleId, metric),
+        },
+      };
+      return json(body);
+    }
+    if (pathname === "/api/monthly") {
+      const body: MonthlyResponse = { months: archive.monthly(moduleId, metric, num("tz")) };
+      return json(body);
+    }
   }
   if (pathname === "/healthz") return new Response("ok");
 

@@ -1,6 +1,7 @@
 // Fake data so the UI can be tried without a Netatmo account (DEMO=1).
 
 import type { WeatherData } from "../shared/types.ts";
+import type { Archive, Row } from "./db.ts";
 
 function curve(base: number, amp: number, phase: number): [number, number][] {
   const now = Math.floor(Date.now() / 1000);
@@ -78,3 +79,44 @@ export function demoData(): WeatherData {
     ],
   };
 }
+
+/** Fills an (in-memory) archive with ~2 years of plausible 30 minute data for the demo modules. */
+export function seedDemoArchive(archive: Archive) {
+  const now = Math.floor(Date.now() / 1000);
+  const start = now - 2 * 365 * 24 * 3600 - 60 * 24 * 3600;
+  const step = 1800;
+  const year = 365.25 * 24 * 3600;
+  let pressure = 1013;
+
+  const outdoor: Row[] = [];
+  const living: Row[] = [];
+  const bedroom: Row[] = [];
+  for (let t = start; t <= now; t += step) {
+    // Coldest around late January, warmest late July, slowly warming over the years.
+    const season = -Math.cos(((t / year) % 1 - 0.06) * 2 * Math.PI);
+    const daily = Math.sin((((t / 3600) % 24) - 9) / 24 * 2 * Math.PI);
+    const weather = Math.sin(t / 290000) * 2.5 + Math.sin(t / 61000) * 1.5;
+    const trend = ((t - start) / year) * 0.3;
+    const out = 7 + 10 * season + (3 + 2 * season) * daily + weather + trend;
+    pressure = Math.min(1045, Math.max(975, pressure + (Math.random() - 0.5) * 0.8));
+
+    outdoor.push([t, [round(out), Math.round(80 - 15 * season - 8 * daily)]]);
+    living.push([t, [
+      round(21.5 + 0.8 * daily + 0.3 * season),
+      Math.round(40 + 8 * season),
+      Math.round(550 + 350 * Math.max(0, daily)),
+      round(pressure),
+      Math.round(35 + 10 * Math.max(0, daily)),
+    ]]);
+    bedroom.push([t, [
+      round(19.5 + 0.6 * daily + 0.5 * season),
+      Math.round(45 + 6 * season),
+      Math.round(600 + 600 * Math.max(0, -daily)),
+    ]]);
+  }
+  archive.insert("outdoor", ["temperature", "humidity"], outdoor);
+  archive.insert("base", ["temperature", "humidity", "co2", "pressure", "noise"], living);
+  archive.insert("bedroom", ["temperature", "humidity", "co2"], bedroom);
+}
+
+const round = (v: number) => Math.round(v * 10) / 10;

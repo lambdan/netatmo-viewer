@@ -17,6 +17,14 @@ export const COLUMNS = [
 ] as const;
 export type Column = typeof COLUMNS[number];
 
+/** Columns that can be charted (they're also interpolated into SQL, so keep this a whitelist). */
+export const METRICS = ["temperature", "humidity", "co2", "pressure", "noise"] as const;
+export type Metric = typeof METRICS[number];
+
+export function isMetric(s: string | null): s is Metric {
+  return (METRICS as readonly string[]).includes(s ?? "");
+}
+
 /** [unix seconds, values in the order of the requested columns] */
 export type Row = [number, (number | null)[]];
 
@@ -124,6 +132,62 @@ export class Archive {
        GROUP BY t ORDER BY t`,
     ).all(moduleId, since) as { t: number; v: number }[];
     return rows.map((r) => [r.t, r.v]);
+  }
+
+  /**
+   * One row per bucket: [bucket start, avg, min, max]. `tzOffset` (seconds east of UTC) aligns
+   * day-sized buckets with local midnight.
+   */
+  series(
+    moduleId: string,
+    metric: Metric,
+    from: number,
+    to: number,
+    bucket: number,
+    tzOffset: number,
+  ): [number, number, number, number][] {
+    const b = Math.max(1, Math.floor(bucket));
+    const off = Math.floor(tzOffset);
+    const rows = this.#db.prepare(
+      `SELECT ((ts + ${off}) / ${b}) * ${b} - ${off} AS t,
+         ROUND(AVG(${metric}), 2) AS avg, MIN(${metric}) AS lo, MAX(${metric}) AS hi
+       FROM measurements
+       WHERE module_id = ? AND ts >= ? AND ts < ? AND ${metric} IS NOT NULL
+       GROUP BY t ORDER BY t`,
+    ).all(moduleId, from, to) as { t: number; avg: number; lo: number; hi: number }[];
+    return rows.map((r) => [r.t, r.avg, r.lo, r.hi]);
+  }
+
+  /** Lowest and highest value since `from` (all time if omitted), as [value, unix seconds]. */
+  extremes(moduleId: string, metric: Metric, from = 0) {
+    // SQLite returns the ts of the row that produced a lone MIN()/MAX().
+    const one = (fn: "MIN" | "MAX") =>
+      this.#db.prepare(
+        `SELECT ${fn}(${metric}) AS v, ts FROM measurements
+         WHERE module_id = ? AND ts >= ? AND ${metric} IS NOT NULL`,
+      ).get(moduleId, from) as { v: number | null; ts: number | null };
+    const pick = (r: { v: number | null; ts: number | null }) =>
+      r.v === null || r.ts === null ? undefined : [r.v, r.ts] as [number, number];
+    return { min: pick(one("MIN")), max: pick(one("MAX")) };
+  }
+
+  /** Monthly averages in local time: [year, month (1-12), avg, number of samples]. */
+  monthly(moduleId: string, metric: Metric, tzOffset: number): [number, number, number, number][] {
+    const off = Math.floor(tzOffset);
+    const rows = this.#db.prepare(
+      `SELECT strftime('%Y-%m', ts + ${off}, 'unixepoch') AS ym,
+         ROUND(AVG(${metric}), 2) AS avg, COUNT(*) AS n
+       FROM measurements
+       WHERE module_id = ? AND ${metric} IS NOT NULL
+       GROUP BY ym ORDER BY ym`,
+    ).all(moduleId) as { ym: string; avg: number; n: number }[];
+    return rows.map((r) => [Number(r.ym.slice(0, 4)), Number(r.ym.slice(5, 7)), r.avg, r.n]);
+  }
+
+  oldest(moduleId: string): number | undefined {
+    const r = this.#db.prepare("SELECT MIN(ts) AS ts FROM measurements WHERE module_id = ?")
+      .get(moduleId) as { ts: number | null };
+    return r.ts ?? undefined;
   }
 
   stats() {

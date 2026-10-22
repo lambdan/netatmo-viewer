@@ -64,6 +64,10 @@ the token), so you keep your history even if Netatmo goes down or starts chargin
   several hours. It continues where it left off after a restart.
 - `http://<server-ip>:8080/api/archive` shows rows, oldest/newest timestamp and backfill status per module.
 - The 24h charts are drawn from the archive, so they keep working when Netatmo is unreachable.
+- Tap a card (or **History ›**) to browse the archive: day/week/month/year charts with
+  min–max bands, records (coldest/warmest today, this month, this year, ever), and a **Years**
+  view comparing monthly averages year over year. It goes back to the live view after 3
+  minutes without a touch.
 
 Tables: `measurements` (one row per module and timestamp; temperature, humidity, co2,
 pressure, noise, plus rain/wind columns), `modules` (names), `sync_state` (sync progress).
@@ -96,4 +100,5 @@ DEMO=1 deno task dev:server   # API on :8080
 deno task dev                 # Vite on :5173, proxies /api to :8080
 ```
 
+`deno task typecheck` type-checks the Vue app, `deno task check` the server.
 `deno task build` builds the frontend into `dist/`, and `deno task start` serves it on its own.
