@@ -1,6 +1,7 @@
 services:
   netatmo-viewer:
-    build: .
+    image: ghcr.io/lambdan/netatmo-viewer:latest
+    # build: .   # to build from source instead of pulling
     container_name: netatmo-viewer
     restart: unless-stopped
     ports:

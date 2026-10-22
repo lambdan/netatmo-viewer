@@ -1,5 +1,6 @@
 # --- build the Vue frontend ---
-FROM denoland/deno:2.9.5 AS build
+# The frontend output is platform independent, so build it natively even for multi-arch images.
+FROM --platform=$BUILDPLATFORM denoland/deno:2.9.5 AS build
 WORKDIR /app
 COPY deno.json deno.lock ./
 RUN deno install

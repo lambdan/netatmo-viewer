@@ -28,9 +28,15 @@ new one, put it in `.env` and restart the container.
 
 ## 2. Run it on the server
 
+Copy `docker-compose.yml` and your `.env` to the server, then:
+
 ```sh
-docker compose up -d --build
+docker compose pull && docker compose up -d
 ```
+
+The image (`ghcr.io/lambdan/netatmo-viewer`, amd64 + arm64) is built by GitHub Actions on every
+push to `main` (`:latest`) and on `v*` tags (`:1.2.3`, `:1.2`). To build from source instead, swap
+`image:` for `build: .` in the compose file.
 
 Then open `http://<server-ip>:8080` on the iPad.
 
