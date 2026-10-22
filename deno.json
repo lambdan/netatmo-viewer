@@ -1,0 +1,26 @@
+{
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "dev": "deno run -A npm:vite",
+    "dev:server": "deno run --allow-net --allow-env --allow-read --allow-write --watch server/main.ts",
+    "build": "deno run -A npm:vite build",
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write server/main.ts",
+    "check": "deno check server/main.ts"
+  },
+  "imports": {
+    "vue": "npm:vue@^3.5.44",
+    "vite": "npm:vite@^8.3.5",
+    "@vitejs/plugin-vue": "npm:@vitejs/plugin-vue@^6.0.10",
+    "@std/http": "jsr:@std/http@^1"
+  },
+  "compilerOptions": {
+    "lib": [
+      "deno.ns",
+      "dom",
+      "esnext"
+    ]
+  },
+  "fmt": {
+    "lineWidth": 100
+  }
+}

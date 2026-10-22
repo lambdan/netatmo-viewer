@@ -1,0 +1,67 @@
+# netatmo-viewer
+
+A wall display for a Netatmo weather station, built for an old iPad (iOS 12 / Safari 12)
+that can no longer run the Netatmo app.
+
+- **Deno** server: talks to the Netatmo API, caches the latest reading, serves the page
+- **Vue 3 + TypeScript** frontend, built with Vite and compiled down to Safari 12
+
+Netatmo weather stations have no local API: they only upload to Netatmo's cloud. So the
+server polls `api.netatmo.com` (every 5 min by default; the station itself only uploads about every
+10 min), and the iPad only ever talks to your server.
+
+## 1. Get Netatmo credentials
+
+1. Log in at <https://dev.netatmo.com/apps> with your normal Netatmo account and
+   **Create** an app (name and description can be anything).
+2. On the app page, copy the **client ID** and **client secret**.
+3. Further down, under **Token generator**, pick the scope `read_station`, click
+   **Generate Token**, and copy the **refresh token**.
+
+```sh
+cp .env.example .env   # and fill in the three values
+```
+
+The refresh token is only needed for the first start. After that the server keeps the
+current token in `/data/tokens.json` (a Docker volume). If it ever stops working, generate a
+new one, put it in `.env` and restart the container.
+
+## 2. Run it on the server
+
+```sh
+docker compose up -d --build
+```
+
+Then open `http://<server-ip>:8080` on the iPad.
+
+Without credentials (or with `DEMO=1`) it serves fake data, so you can check the
+setup before doing the Netatmo part.
+
+| Env var                  | Default  | Notes                                  |
+| ------------------------ | -------- | -------------------------------------- |
+| `NETATMO_CLIENT_ID`      |          | Leaving it empty enables demo mode     |
+| `NETATMO_CLIENT_SECRET`  |          |                                        |
+| `NETATMO_REFRESH_TOKEN`  |          | Initial token / fallback               |
+| `POLL_SECONDS`           | `300`    | How often to ask Netatmo (min 60)      |
+| `PORT`                   | `8080`   |                                        |
+| `DEMO`                   |          | `1` = fake data                        |
+
+## 3. iPad setup
+
+- In Safari: open the page → Share → **Add to Home Screen**. Launched from there, it runs
+  full screen without the Safari toolbar.
+- Settings → Display & Brightness → **Auto-Lock: Never**, and keep it plugged in.
+- Optional: Settings → Accessibility → **Guided Access** keeps it locked to the app.
+
+The page fetches new data every minute, dims itself between 22:00 and 06:00, and reloads
+itself every 6 hours to stay healthy on old Safari.
+
+## Development
+
+```sh
+deno install
+DEMO=1 deno task dev:server   # API on :8080
+deno task dev                 # Vite on :5173, proxies /api to :8080
+```
+
+`deno task build` builds the frontend into `dist/`, and `deno task start` serves it on its own.

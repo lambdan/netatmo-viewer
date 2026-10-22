@@ -1,0 +1,14 @@
+services:
+  netatmo-viewer:
+    build: .
+    container_name: netatmo-viewer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      # Keeps the rotated Netatmo refresh token across restarts.
+      - netatmo-data:/data
+
+volumes:
+  netatmo-data:
