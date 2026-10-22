@@ -1,6 +1,6 @@
 // Postgres archive of every measurement Netatmo has for the station (plus the API tokens).
 
-import type { ModuleKind } from "../shared/types.ts";
+import type { ModuleKind, StationEvent } from "../shared/types.ts";
 
 export const COLUMNS = [
   "temperature",
@@ -86,6 +86,14 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS settings (
     key text PRIMARY KEY,
     value jsonb NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS events (
+    id serial PRIMARY KEY,
+    at timestamptz NOT NULL,
+    label text NOT NULL,
+    -- NULL = applies to all modules
+    module_id text REFERENCES modules (id),
+    created_at timestamptz NOT NULL DEFAULT now()
   );
 `;
 
@@ -242,6 +250,25 @@ export class Archive {
        LEFT JOIN sync_state s ON s.module_id = m.id
        GROUP BY m.id, s.backfill_done ORDER BY m.kind, m.name`,
     );
+  }
+
+  events(): Promise<StationEvent[]> {
+    return this.db.query<StationEvent>(
+      `SELECT id, ${epoch("at")} AS at, label, module_id AS "moduleId" FROM events ORDER BY at`,
+    );
+  }
+
+  async addEvent(at: number, label: string, moduleId: string | null): Promise<StationEvent> {
+    const [e] = await this.db.query<StationEvent>(
+      `INSERT INTO events (at, label, module_id) VALUES (to_timestamp($1::float8), $2, $3)
+       RETURNING id, ${epoch("at")} AS at, label, module_id AS "moduleId"`,
+      [at, label, moduleId],
+    );
+    return e;
+  }
+
+  async deleteEvent(id: number) {
+    await this.db.query("DELETE FROM events WHERE id = $1", [id]);
   }
 
   async getSetting<T>(key: string): Promise<T | undefined> {

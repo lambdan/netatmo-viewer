@@ -6,6 +6,7 @@ import type {
   MonthlyResponse,
   RecordsResponse,
   SeriesResponse,
+  StationEvent,
 } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { fixed, fmtDate } from "../format.ts";
@@ -13,6 +14,7 @@ import { METRIC_INFO, metricsFor } from "../metrics.ts";
 import { periodFor, type RangeKind, recordStarts, shift, timeZone } from "../period.ts";
 import { isLight } from "../theme.ts";
 import { buildYears, yearColor } from "../trends.ts";
+import EventsPanel from "./EventsPanel.vue";
 import HistoryChart from "./HistoryChart.vue";
 import RecordsPanel from "./RecordsPanel.vue";
 import Segmented from "./Segmented.vue";
@@ -91,6 +93,28 @@ async function load() {
 }
 watch([moduleId, metric, () => period.value?.from, view], load, { immediate: true });
 
+// --- events (e.g. station moves) ---
+
+const events = ref<StationEvent[]>([]);
+const showEvents = ref(false);
+async function loadEvents() {
+  try {
+    events.value = await api.events();
+  } catch (e) {
+    error.value = `Couldn't load events (${(e as Error).message})`;
+  }
+}
+loadEvents();
+
+/** This module's events plus the ones for all modules. */
+const moduleEvents = computed(() =>
+  events.value.filter((e) => e.moduleId === null || e.moduleId === moduleId.value)
+);
+
+function eventsIn(year: number) {
+  return moduleEvents.value.filter((e) => new Date(e.at * 1000).getFullYear() === year);
+}
+
 // --- derived display data ---
 
 const summary = computed(() => {
@@ -154,7 +178,10 @@ onUnmounted(() => clearTimeout(idleTimer));
     @touchend="onTouchEnd"
   >
     <header class="top">
-      <button class="back" @click="emit('close')">‹ Now</button>
+      <div>
+        <button class="back" @click="emit('close')">‹ Now</button>
+        <button class="events-button" @click="showEvents = true">Events</button>
+      </div>
       <Segmented v-if="moduleOptions.length > 1" :options="moduleOptions" v-model="moduleId" />
       <Segmented v-if="metricOptions.length > 1" :options="metricOptions" v-model="metric" />
     </header>
@@ -192,6 +219,7 @@ onUnmounted(() => clearTimeout(idleTimer));
             :decimals="info.decimals"
             :unit="info.unit"
             :tip-format="period.tipFormat"
+            :events="moduleEvents"
           />
           <TrendsChart
             v-else
@@ -209,7 +237,12 @@ onUnmounted(() => clearTimeout(idleTimer));
           <h3>Yearly average</h3>
           <div v-for="(y, i) in years.slice().reverse()" :key="y.year" class="year">
             <i :style="{ background: yearColor(years.length - 1 - i, years.length, isLight) }" />
-            <span class="name">{{ y.year }}<small v-if="y.partial">{{ y.partial }}</small></span>
+            <span class="name">
+              {{ y.year }}<small v-if="y.partial">{{ y.partial }}</small>
+              <span v-for="e in eventsIn(y.year)" :key="e.id" class="year-event">
+                {{ e.label }} · {{ fmtDate(e.at, { day: "numeric", month: "short" }) }}
+              </span>
+            </span>
             <strong>{{ y.avg === undefined ? "–" : fixed(y.avg, info.decimals) + info.unit }}</strong>
             <span class="delta" :class="{ up: (y.delta ?? 0) > 0, down: (y.delta ?? 0) < 0 }">
               {{ y.delta === undefined ? "" : signed(y.delta) }}
@@ -228,6 +261,15 @@ onUnmounted(() => clearTimeout(idleTimer));
     </main>
 
     <footer v-if="error" class="error">{{ error }}</footer>
+
+    <EventsPanel
+      v-if="showEvents"
+      :events="events"
+      :modules="charted"
+      :current-module="moduleId"
+      @changed="loadEvents"
+      @close="showEvents = false"
+    />
   </div>
 </template>
 
@@ -267,6 +309,19 @@ button {
   padding: 8px 14px 8px 4px;
   font-size: 19px;
   font-weight: 600;
+}
+.events-button {
+  margin-left: 6px;
+  padding: 7px 13px;
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 15px;
+}
+.year-event {
+  display: block;
+  font-size: 12px;
+  color: var(--warn);
 }
 .nav {
   display: -webkit-flex;

@@ -89,3 +89,13 @@ export interface RecordsResponse {
 export interface MonthlyResponse {
   months: [number, number, number, number][];
 }
+
+/** Something worth marking on the charts, e.g. a module being moved. */
+export interface StationEvent {
+  id: number;
+  /** Unix seconds */
+  at: number;
+  label: string;
+  /** The module it's about; null applies to all modules (e.g. moving house). */
+  moduleId: string | null;
+}

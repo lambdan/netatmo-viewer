@@ -224,6 +224,34 @@ async function archiveApi(pathname: string, q: URLSearchParams): Promise<Respons
   return json({ error: "not found" }, 404);
 }
 
+/** GET /api/events, POST /api/events {at, label, moduleId?}, DELETE /api/events/:id */
+async function eventsApi(req: Request, pathname: string): Promise<Response> {
+  if (pathname === "/api/events" && req.method === "GET") return json(await archive.events());
+  if (pathname === "/api/events" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    const at = Number(body.at);
+    const label = String(body.label ?? "").trim().slice(0, 100);
+    const moduleId = typeof body.moduleId === "string" && body.moduleId ? body.moduleId : null;
+    // Netatmo weather stations exist since 2012; allow a bit of future for planned moves.
+    if (!label || !(at > Date.UTC(2012, 0, 1) / 1000 && at < Date.now() / 1000 + 366 * 86400)) {
+      return json({ error: "An event needs a label and a date" }, 400);
+    }
+    const event = await archive.addEvent(at, label, moduleId);
+    console.log(
+      `Added event "${event.label}" for ${moduleId ?? "all modules"} at ` +
+        new Date(event.at * 1000).toISOString(),
+    );
+    return json(event);
+  }
+  const id = Number(pathname.split("/")[3]);
+  if (req.method === "DELETE" && Number.isInteger(id)) {
+    await archive.deleteEvent(id);
+    console.log(`Deleted event ${id}`);
+    return json({ ok: true });
+  }
+  return json({ error: "not found" }, 404);
+}
+
 console.log(
   `netatmo-viewer on http://0.0.0.0:${PORT} (${DEMO ? "demo data" : "live Netatmo data"})`,
 );
@@ -239,6 +267,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   if (pathname === "/api/setup" && req.method === "POST") return setup(req);
   if (pathname.startsWith("/api/")) {
     try {
+      if (pathname.startsWith("/api/events")) return await eventsApi(req, pathname);
       return await archiveApi(pathname, url.searchParams);
     } catch (e) {
       console.warn(`${pathname} failed:`, (e as Error).message);

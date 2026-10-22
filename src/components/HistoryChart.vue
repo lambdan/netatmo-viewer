@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import type { StationEvent } from "../../shared/types.ts";
 import { fixed, fmtDate } from "../format.ts";
 import { niceStep, type Tick } from "../period.ts";
 
@@ -14,6 +15,7 @@ const props = defineProps<{
   decimals: number;
   unit: string;
   tipFormat: Intl.DateTimeFormatOptions;
+  events?: StationEvent[];
 }>();
 
 const W = 1000;
@@ -23,6 +25,9 @@ const active = ref<number>();
 watch(() => props.points, () => (active.value = undefined));
 
 const pct = (v: number) => `${v}%`;
+const visibleEvents = computed(() =>
+  (props.events ?? []).filter((e) => e.at >= props.from && e.at < props.to)
+);
 const xOf = (t: number) => ((t - props.from) / (props.to - props.from)) * 100;
 // Plot each bucket in its middle.
 const center = (p: [number, number, number, number]) => Math.min(p[0] + props.bucket / 2, props.to);
@@ -124,6 +129,14 @@ const tip = computed(() => {
         </div>
       </template>
       <div v-for="t in ticks" :key="t.t" class="vline" :style="{ left: pct(xOf(t.t)) }" />
+      <template v-for="e in visibleEvents" :key="e.id">
+        <div class="event-line" :style="{ left: pct(xOf(e.at)) }" />
+        <span
+          class="event-label"
+          :class="{ right: xOf(e.at) > 75 }"
+          :style="{ left: pct(xOf(e.at)) }"
+        >{{ e.label }}</span>
+      </template>
 
       <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none">
         <path :d="paths.band" :fill="color" fill-opacity="0.2" />
@@ -216,6 +229,30 @@ svg {
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
+}
+.event-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px dashed var(--warn);
+  opacity: 0.7;
+}
+.event-label {
+  position: absolute;
+  bottom: 6px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.event-label.right {
+  -webkit-transform: translateX(-100%);
+  transform: translateX(-100%);
+  margin-left: -6px;
 }
 .cursor {
   position: absolute;

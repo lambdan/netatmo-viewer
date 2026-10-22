@@ -1,4 +1,10 @@
-import type { Metric, MonthlyResponse, RecordsResponse, SeriesResponse } from "../shared/types.ts";
+import type {
+  Metric,
+  MonthlyResponse,
+  RecordsResponse,
+  SeriesResponse,
+  StationEvent,
+} from "../shared/types.ts";
 
 async function get<T>(path: string, params: Record<string, string | number>): Promise<T> {
   const qs = Object.keys(params).map((k) => `${k}=${encodeURIComponent(String(params[k]))}`)
@@ -8,7 +14,22 @@ async function get<T>(path: string, params: Record<string, string | number>): Pr
   return res.json();
 }
 
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+  return json;
+}
+
 export const api = {
+  events: () => get<StationEvent[]>("/api/events", {}),
+  addEvent: (at: number, label: string, moduleId: string | null) =>
+    send<StationEvent>("POST", "/api/events", { at, label, moduleId }),
+  deleteEvent: (id: number) => send<{ ok: true }>("DELETE", `/api/events/${id}`),
   history: (q: { module: string; metric: Metric; from: number; to: number; bucket: number; tz: string }) =>
     get<SeriesResponse>("/api/history", q),
   records: (q: { module: string; metric: Metric; today: number; month: number; year: number }) =>
