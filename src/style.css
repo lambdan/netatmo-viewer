@@ -1,8 +1,24 @@
 :root {
   --bg: #0b1016;
   --card: #151c25;
+  --card-shadow: none;
   --text: #e9eef4;
   --muted: #8a97a8;
+  --warn: #ffb45c;
+  --warn-bg: rgba(255, 170, 60, 0.18);
+  --line: rgba(255, 255, 255, 0.08);
+}
+
+/* Daytime theme, toggled from App.vue */
+:root.light {
+  --bg: #e9edf2;
+  --card: #ffffff;
+  --card-shadow: 0 1px 3px rgba(20, 30, 45, 0.08);
+  --text: #18212c;
+  --muted: #687586;
+  --warn: #a85b00;
+  --warn-bg: rgba(230, 140, 20, 0.15);
+  --line: rgba(20, 30, 45, 0.08);
 }
 
 * {
@@ -15,6 +31,8 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
+  -webkit-transition: background-color 1.5s, color 1.5s;
+  transition: background-color 1.5s, color 1.5s;
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;

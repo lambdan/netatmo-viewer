@@ -3,11 +3,12 @@ import { computed } from "vue";
 import type { Module } from "../../shared/types.ts";
 import { co2Level, direction, num, temp, tempColor, time, trendArrow } from "../format.ts";
 import Sparkline from "./Sparkline.vue";
+import { isLight } from "../theme.ts";
 
 const props = defineProps<{ module: Module; hero?: boolean }>();
 
 const m = computed(() => props.module);
-const color = computed(() => tempColor(m.value.temperature));
+const color = computed(() => tempColor(m.value.temperature, isLight.value));
 const lowBattery = computed(() => m.value.battery !== undefined && m.value.battery < 20);
 const hasTemp = computed(() => m.value.temperature !== undefined);
 </script>
@@ -90,7 +91,10 @@ const hasTemp = computed(() => m.value.temperature !== undefined);
   padding: 18px 22px;
   border-radius: 18px;
   background: var(--card);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
+  -webkit-transition: background-color 1.5s, box-shadow 1.5s;
+  transition: background-color 1.5s, box-shadow 1.5s;
 }
 .card.offline {
   opacity: 0.55;
@@ -117,8 +121,8 @@ h2 {
   font-weight: 600;
 }
 .badge.warn {
-  background: rgba(255, 170, 60, 0.18);
-  color: #ffb45c;
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
 .main {

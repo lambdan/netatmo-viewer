@@ -99,7 +99,7 @@ svg {
   height: 8px;
   margin: -4px 0 0 -4px;
   border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 3px var(--card);
 }
 .ticks {
   position: absolute;

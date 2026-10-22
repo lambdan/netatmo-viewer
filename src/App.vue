@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import type { WeatherData } from "../shared/types.ts";
 import { ago, clockTime, dateLine } from "./format.ts";
 import ModuleCard from "./components/ModuleCard.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
+import { isLight, lightAt, themeSettings } from "./theme.ts";
 
 const REFRESH_MS = 60 * 1000;
 // Old Safari leaks a bit over days of uptime; a reload every few hours keeps it fresh.
@@ -37,10 +39,12 @@ const status = computed(() => {
   return { text: `Updated ${ago(d.fetchedAt, now.value.getTime())}`, warn: false };
 });
 
-// Dim the display at night so it doesn't light up the room.
-const night = computed(() => {
-  const h = now.value.getHours();
-  return h >= 22 || h < 6;
+const showSettings = ref(false);
+
+// Light theme during the day, dark at night, unless forced in the settings panel.
+watchEffect(() => {
+  isLight.value = lightAt(now.value, themeSettings);
+  document.documentElement.classList.toggle("light", isLight.value);
 });
 
 let refreshTimer: number | undefined;
@@ -62,9 +66,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app" :class="{ night }">
+  <div class="app">
     <header class="top">
-      <div class="station">{{ data?.stationName }}</div>
+      <div class="station">
+        <button class="gear" aria-label="Settings" @click="showSettings = true">⚙&#xFE0E;</button>
+        {{ data?.stationName }}
+      </div>
       <div class="clock">
         <span class="date">{{ dateLine(now) }}</span>
         <span class="time">{{ clockTime(now) }}</span>
@@ -82,6 +89,8 @@ onUnmounted(() => {
     <footer class="bottom" :class="{ warn: status.warn }">
       {{ status.text }}<template v-if="data?.demo"> · demo data</template>
     </footer>
+
+    <SettingsPanel v-if="showSettings" @close="showSettings = false" />
   </div>
 </template>
 
@@ -93,11 +102,6 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   padding: 18px 20px 10px;
-  -webkit-transition: opacity 2s;
-  transition: opacity 2s;
-}
-.app.night {
-  opacity: 0.55;
 }
 
 .top {
@@ -113,6 +117,17 @@ onUnmounted(() => {
   font-size: 20px;
   font-weight: 600;
   color: var(--muted);
+}
+.gear {
+  margin: -10px 6px -10px -8px;
+  padding: 10px 8px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+  -webkit-appearance: none;
 }
 .clock .date {
   font-size: 18px;
@@ -173,7 +188,7 @@ onUnmounted(() => {
   color: var(--muted);
 }
 .bottom.warn {
-  color: #ffb45c;
+  color: var(--warn);
 }
 
 /* Portrait: stack everything */

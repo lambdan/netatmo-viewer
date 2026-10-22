@@ -7,7 +7,11 @@ const oneDecimal = new Intl.NumberFormat(locale, {
   maximumFractionDigits: 1,
 });
 const integer = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
-const clock = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+const clock = new Intl.DateTimeFormat(locale, {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 const day = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" });
 
 export function temp(v?: number): string {
@@ -43,8 +47,8 @@ export function ago(ms: number, now: number): string {
 }
 
 /** Hue for a temperature: blue when cold, green when mild, orange/red when warm. */
-export function tempColor(v?: number): string {
-  if (v === undefined) return "hsl(210, 10%, 70%)";
+export function tempColor(v?: number, light = false): string {
+  if (v === undefined) return light ? "hsl(210, 10%, 45%)" : "hsl(210, 10%, 70%)";
   const stops: [number, number][] = [[-15, 230], [0, 200], [10, 165], [18, 95], [24, 38], [32, 8]];
   let hue = stops[0][1];
   if (v >= stops[stops.length - 1][0]) hue = stops[stops.length - 1][1];
@@ -53,7 +57,8 @@ export function tempColor(v?: number): string {
     const [t1, h1] = stops[i + 1];
     if (v >= t0 && v < t1) hue = h0 + ((v - t0) / (t1 - t0)) * (h1 - h0);
   }
-  return `hsl(${Math.round(hue)}, 75%, 62%)`;
+  // Darker on the light theme so it stays readable on white.
+  return light ? `hsl(${Math.round(hue)}, 80%, 38%)` : `hsl(${Math.round(hue)}, 75%, 62%)`;
 }
 
 /** CO2 comfort level, roughly following common indoor air guidelines. */

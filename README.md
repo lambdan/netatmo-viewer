@@ -59,8 +59,12 @@ setup before doing the Netatmo part.
 - Settings → Display & Brightness → **Auto-Lock: Never**, and keep it plugged in.
 - Optional: Settings → Accessibility → **Guided Access** keeps it locked to the app.
 
-The page fetches new data every minute, dims itself between 22:00 and 06:00, and reloads
-itself every 6 hours to stay healthy on old Safari.
+- Tap the ⚙ next to the station name to pick the theme: light during the day and dark at night
+  (07:00–21:00 by default), or always light/dark. It's saved on the iPad itself. A home screen
+  web app has its own storage separate from Safari, so set it from the home screen icon.
+
+The page fetches new data every minute and reloads itself every 6 hours to stay healthy on old
+Safari.
 
 ## Development
 
