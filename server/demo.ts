@@ -81,7 +81,7 @@ export function demoData(): WeatherData {
 }
 
 /** Fills an (in-memory) archive with ~2 years of plausible 30 minute data for the demo modules. */
-export function seedDemoArchive(archive: Archive) {
+export async function seedDemoArchive(archive: Archive) {
   const now = Math.floor(Date.now() / 1000);
   const start = now - 2 * 365 * 24 * 3600 - 60 * 24 * 3600;
   const step = 1800;
@@ -114,9 +114,10 @@ export function seedDemoArchive(archive: Archive) {
       Math.round(600 + 600 * Math.max(0, -daily)),
     ]]);
   }
-  archive.insert("outdoor", ["temperature", "humidity"], outdoor);
-  archive.insert("base", ["temperature", "humidity", "co2", "pressure", "noise"], living);
-  archive.insert("bedroom", ["temperature", "humidity", "co2"], bedroom);
+  for (const m of demoData().modules) await archive.upsertModule(m);
+  await archive.insert("outdoor", ["temperature", "humidity"], outdoor);
+  await archive.insert("base", ["temperature", "humidity", "co2", "pressure", "noise"], living);
+  await archive.insert("bedroom", ["temperature", "humidity", "co2"], bedroom);
 }
 
 const round = (v: number) => Math.round(v * 10) / 10;

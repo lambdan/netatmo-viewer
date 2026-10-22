@@ -3,59 +3,67 @@
 A wall display for a Netatmo weather station, built for an old iPad (iOS 12 / Safari 12)
 that can no longer run the Netatmo app.
 
-- **Deno** server: talks to the Netatmo API, caches the latest reading, serves the page
+- **Deno** server: talks to the Netatmo API, archives every measurement in **Postgres**, serves
+  the page
 - **Vue 3 + TypeScript** frontend, built with Vite and compiled down to Safari 12
 
 Netatmo weather stations have no local API: they only upload to Netatmo's cloud. So the
 server polls `api.netatmo.com` (every 5 min by default; the station itself only uploads about every
 10 min), and the iPad only ever talks to your server.
 
-## 1. Get Netatmo credentials
+## 1. Start it on the server
 
-1. Log in at <https://dev.netatmo.com/apps> with your normal Netatmo account and
-   **Create** an app (name and description can be anything).
-2. On the app page, copy the **client ID** and **client secret**.
-3. Further down, under **Token generator**, pick the scope `read_station`, click
-   **Generate Token**, and copy the **refresh token**.
-
-```sh
-cp .env.example .env   # and fill in the three values
-```
-
-The refresh token is only needed for the first start. After that the server keeps the
-current token in `/data/tokens.json` (a Docker volume). If it ever stops working, generate a
-new one, put it in `.env` and restart the container.
-
-## 2. Run it on the server
-
-Copy `docker-compose.yml` and your `.env` to the server, then:
+Copy `docker-compose.yml` to the server, then:
 
 ```sh
 docker compose pull && docker compose up -d
 ```
 
+This starts the viewer and a Postgres 17 container for the archive (data in the `netatmo-pg`
+volume). If you set `POSTGRES_PASSWORD` in `.env`, do it before the first start; Postgres only
+reads it when it creates the database. To use a Postgres you already run, set `DATABASE_URL` in `.env`
+and remove the `db` service (and `depends_on`) from the compose file.
+
 The image (`ghcr.io/lambdan/netatmo-viewer`, amd64 + arm64) is built by GitHub Actions on every
 push to `main` (`:latest`) and on `v*` tags (`:1.2.3`, `:1.2`). To build from source instead, swap
 `image:` for `build: .` in the compose file.
 
-Then open `http://<server-ip>:8080` on the iPad.
+## 2. Connect your Netatmo account
 
-Without credentials (or with `DEMO=1`) it serves fake data, so you can check the
-setup before doing the Netatmo part.
+Open `http://<server-ip>:8080` (from a computer is easiest, there's some copy and paste) and follow
+the steps on the page:
+
+1. Log in at <https://dev.netatmo.com/apps> with your normal Netatmo account and **create an
+   app** (name and description can be anything).
+2. Copy the app's **client ID** and **client secret**.
+3. Under **Token generator**, pick the scope `read_station`, click **Generate Token**, and copy
+   the **refresh token**.
+
+The server checks them with Netatmo and stores them in the database. After that the form is closed,
+so nobody else on your network can change the account. It only comes back if Netatmo stops accepting the
+login (e.g. the token was revoked).
+
+Prefer config files? Set `NETATMO_CLIENT_ID`, `NETATMO_CLIENT_SECRET` and
+`NETATMO_REFRESH_TOKEN` in `.env` instead, and the setup page is skipped.
+
+With `DEMO=1` it serves made-up data from an in-memory Postgres (PGlite), no account or database
+needed.
 
 | Env var                  | Default  | Notes                                  |
 | ------------------------ | -------- | -------------------------------------- |
-| `NETATMO_CLIENT_ID`      |          | Leaving it empty enables demo mode     |
-| `NETATMO_CLIENT_SECRET`  |          |                                        |
-| `NETATMO_REFRESH_TOKEN`  |          | Initial token / fallback               |
+| `NETATMO_CLIENT_ID`      |          | Optional, instead of the setup page    |
+| `NETATMO_CLIENT_SECRET`  |          | Optional, instead of the setup page    |
+| `NETATMO_REFRESH_TOKEN`  |          | Optional, instead of the setup page    |
+| `DATABASE_URL`           |          | `postgres://user:pass@host:5432/db`; the compose file sets it |
+| `POSTGRES_PASSWORD`      | `netatmo`| For the bundled `db` service           |
 | `POLL_SECONDS`           | `300`    | How often to ask Netatmo (min 60)      |
 | `PORT`                   | `8080`   |                                        |
 | `DEMO`                   |          | `1` = fake data                        |
 
-## Local archive
+## Archive
 
-Every measurement is also stored in a SQLite database at `/data/netatmo.sqlite` (the same volume as
-the token), so you keep your history even if Netatmo goes down or starts charging for it.
+Every measurement is also stored in Postgres, so you keep your history even if Netatmo goes down
+or starts charging for it.
 
 - New readings (about every 5 minutes) are synced on each poll. After downtime, the server catches
   up on what it missed when it starts again.
@@ -69,13 +77,16 @@ the token), so you keep your history even if Netatmo goes down or starts chargin
   view comparing monthly averages year over year. It goes back to the live view after 3
   minutes without a touch.
 
-Tables: `measurements` (one row per module and timestamp; temperature, humidity, co2,
-pressure, noise, plus rain/wind columns), `modules` (names), `sync_state` (sync progress).
-To take a consistent copy while it's running:
+Tables (created automatically):
+
+- `measurements`: one row per module and `ts` (`timestamptz`) with `temperature`, `humidity`,
+  `co2`, `pressure`, `noise`, plus rain/wind columns. Ready for Grafana or plain SQL.
+- `modules`: names and kinds. `sync_state`: sync/backfill progress. `settings`: the Netatmo tokens.
+
+Backup:
 
 ```sh
-docker exec -u deno netatmo-viewer deno eval "import { DatabaseSync } from 'node:sqlite'; new DatabaseSync('/data/netatmo.sqlite').exec(\"VACUUM INTO '/data/backup.sqlite'\")"
-docker cp netatmo-viewer:/data/backup.sqlite .
+docker exec netatmo-db pg_dump -U netatmo -Fc netatmo > netatmo.dump
 ```
 
 ## 3. iPad setup
@@ -96,8 +107,15 @@ Safari.
 
 ```sh
 deno install
-DEMO=1 deno task dev:server   # API on :8080
+DEMO=1 deno task dev:server   # API on :8080, in-memory demo database
 deno task dev                 # Vite on :5173, proxies /api to :8080
+```
+
+For live data locally, start a Postgres and point `DATABASE_URL` at it:
+
+```sh
+docker run -d --name netatmo-pg -e POSTGRES_PASSWORD=netatmo -p 5432:5432 postgres:17
+DATABASE_URL=postgres://postgres:netatmo@localhost:5432/postgres deno run --env-file=.env -A --watch server/main.ts
 ```
 
 `deno task typecheck` type-checks the Vue app, `deno task check` the server.

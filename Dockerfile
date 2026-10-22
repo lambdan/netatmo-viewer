@@ -10,20 +10,16 @@ RUN deno task build
 # --- runtime: just the Deno server + built static files ---
 FROM denoland/deno:2.9.5
 WORKDIR /app
-RUN mkdir /data && chown deno:deno /data
 COPY deno.json deno.lock ./
 COPY server ./server
 COPY shared ./shared
 COPY --from=build /app/dist ./dist
-COPY docker-entrypoint.sh /usr/local/bin/netatmo-entrypoint.sh
+# deno cache sets up node_modules here for the npm packages (postgres, pglite).
+RUN chown deno:deno /app
 USER deno
 RUN deno cache server/main.ts
-# The entrypoint fixes /data ownership as root, then runs the server as deno.
-USER root
 
-ENV DATA_DIR=/data PORT=8080
-VOLUME /data
+ENV PORT=8080
 EXPOSE 8080
 HEALTHCHECK --interval=60s --timeout=5s CMD deno eval "const r = await fetch('http://localhost:8080/healthz'); if (!r.ok) Deno.exit(1)"
-ENTRYPOINT ["/tini", "--", "netatmo-entrypoint.sh"]
-CMD ["deno", "run", "--allow-net", "--allow-env", "--allow-read", "--allow-write=/data", "server/main.ts"]
+CMD ["deno", "run", "--allow-net", "--allow-env", "--allow-read", "server/main.ts"]

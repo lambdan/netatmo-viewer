@@ -5,18 +5,26 @@ import type { Module, ModuleKind, Trend, WeatherData } from "../shared/types.ts"
 
 const API = "https://api.netatmo.com";
 
-interface Tokens {
+export interface Tokens {
   accessToken: string;
   refreshToken: string;
   /** Unix ms */
   expiresAt: number;
 }
 
-export interface NetatmoConfig {
+/** The client ID/secret of the user's app on dev.netatmo.com. */
+export interface NetatmoApp {
   clientId: string;
   clientSecret: string;
+}
+
+export interface NetatmoConfig extends Partial<NetatmoApp> {
   initialRefreshToken?: string;
-  dataDir: string;
+  /** Where the current tokens are kept between restarts. */
+  tokenStore: {
+    load(): Promise<Tokens | undefined>;
+    save(tokens: Tokens): Promise<void>;
+  };
 }
 
 class NetatmoError extends Error {
@@ -25,29 +33,42 @@ class NetatmoError extends Error {
   }
 }
 
+/** Netatmo rejected the app credentials or refresh token: they have to be entered again. */
+export class AuthError extends Error {}
+
 export class Netatmo {
   #tokens?: Tokens;
-  #tokenFile: string;
   #refreshing?: Promise<Tokens>;
 
-  constructor(private config: NetatmoConfig) {
-    this.#tokenFile = `${config.dataDir}/tokens.json`;
+  constructor(private config: NetatmoConfig) {}
+
+  get configured(): boolean {
+    return !!this.config.clientId && !!this.config.clientSecret;
+  }
+
+  /** The current tokens, once a refresh has succeeded. */
+  get tokens(): Tokens | undefined {
+    return this.#tokens;
+  }
+
+  /** Switches to new, already verified credentials. */
+  async configure(app: NetatmoApp, tokens: Tokens) {
+    this.config.clientId = app.clientId;
+    this.config.clientSecret = app.clientSecret;
+    // The env token belonged to the old setup.
+    this.config.initialRefreshToken = undefined;
+    this.#tokens = tokens;
+    await this.config.tokenStore.save(tokens);
   }
 
   async #loadTokens(): Promise<Tokens> {
+    this.#tokens ??= await this.config.tokenStore.load();
     if (this.#tokens) return this.#tokens;
-    try {
-      this.#tokens = JSON.parse(await Deno.readTextFile(this.#tokenFile));
-      return this.#tokens!;
-    } catch {
-      if (!this.config.initialRefreshToken) {
-        throw new Error(
-          `No tokens in ${this.#tokenFile} and NETATMO_REFRESH_TOKEN is not set`,
-        );
-      }
-      // Force a refresh on first use.
-      return { accessToken: "", refreshToken: this.config.initialRefreshToken, expiresAt: 0 };
+    if (!this.config.initialRefreshToken) {
+      throw new AuthError("No Netatmo refresh token has been set up");
     }
+    // Force a refresh on first use.
+    return { accessToken: "", refreshToken: this.config.initialRefreshToken, expiresAt: 0 };
   }
 
   async #refresh(refreshToken: string): Promise<Tokens> {
@@ -57,12 +78,18 @@ export class Netatmo {
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
+        client_id: this.config.clientId ?? "",
+        client_secret: this.config.clientSecret ?? "",
       }),
     });
     if (!res.ok) {
-      throw new Error(`Token refresh failed (${res.status}): ${await res.text()}`);
+      const text = await res.text();
+      const message = `Token refresh failed (${res.status}): ${text}`;
+      // 400/401/403 mean bad client ID/secret or a revoked/invalid refresh token; other statuses
+      // (5xx etc.) are Netatmo having trouble and worth retrying.
+      throw res.status >= 400 && res.status < 500 && res.status !== 429
+        ? new AuthError(message)
+        : new Error(message);
     }
     const json = await res.json();
     const tokens: Tokens = {
@@ -73,11 +100,10 @@ export class Netatmo {
     };
     this.#tokens = tokens;
     try {
-      await Deno.mkdir(this.config.dataDir, { recursive: true });
-      await Deno.writeTextFile(this.#tokenFile, JSON.stringify(tokens, null, 2));
+      await this.config.tokenStore.save(tokens);
     } catch (e) {
       // Not fatal: the tokens still work from memory, they just won't survive a restart.
-      console.warn(`Could not save tokens to ${this.#tokenFile}:`, (e as Error).message);
+      console.warn("Could not save tokens:", (e as Error).message);
     }
     return tokens;
   }

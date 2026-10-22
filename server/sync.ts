@@ -53,13 +53,13 @@ export class Sync {
     this.#setupAt = setupAt;
     this.#modules = modules;
 
+    for (const m of modules) await this.archive.upsertModule(m);
     for (const m of modules) {
-      this.archive.upsertModule(m);
-      const state = this.archive.state(m.id);
+      const state = await this.archive.state(m.id);
       const from = state.syncedUntil ?? now() - INITIAL_LOOKBACK;
       try {
         const newest = await this.#fetchRange(m, from + 1, now());
-        this.archive.setState(m.id, {
+        await this.archive.setState(m.id, {
           ...state,
           syncedUntil: newest ?? state.syncedUntil ?? from,
           backfilledFrom: state.backfilledFrom ?? from,
@@ -88,7 +88,7 @@ export class Sync {
         end,
         limit: PAGE_LIMIT,
       });
-      this.archive.insert(m.id, types.map(([, c]) => c), rows);
+      await this.archive.insert(m.id, types.map(([, c]) => c), rows);
       if (!rows.length) break;
       newest = rows[rows.length - 1][0];
       if (rows.length < PAGE_LIMIT) break;
@@ -101,8 +101,10 @@ export class Sync {
   async #backfill() {
     while (true) {
       // Work on whichever module is furthest from done, so they all move back in time together.
-      const pending = this.#modules
-        .map((m) => ({ m, s: this.archive.state(m.id) }))
+      const states = await Promise.all(
+        this.#modules.map(async (m) => ({ m, s: await this.archive.state(m.id) })),
+      );
+      const pending = states
         .filter(({ s }) => !s.backfillDone && s.backfilledFrom !== undefined)
         .sort((a, b) => b.s.backfilledFrom! - a.s.backfilledFrom!);
       if (!pending.length) return;
@@ -115,7 +117,7 @@ export class Sync {
         // Stop at the station's setup date. Without one, keep going back until 2012, the year
         // Netatmo launched the weather station.
         const done = begin <= (this.#setupAt ?? Date.UTC(2012, 0, 1) / 1000);
-        this.archive.setState(m.id, { ...s, backfilledFrom: begin, backfillDone: done });
+        await this.archive.setState(m.id, { ...s, backfilledFrom: begin, backfillDone: done });
         if (done) console.log(`backfill for ${m.name} complete`);
         // Log once per month of history.
         else if (month(begin) !== month(end)) {

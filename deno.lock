@@ -12,7 +12,9 @@
     "jsr:@std/net@^1.0.7": "1.0.7",
     "jsr:@std/path@^1.1.6": "1.1.6",
     "jsr:@std/streams@^1.2.0": "1.2.0",
+    "npm:@electric-sql/pglite@~0.5.11": "0.5.11",
     "npm:@vitejs/plugin-vue@^6.0.10": "6.0.10_vite@8.3.5_vue@3.5.44__typescript@5.9.3_typescript@5.9.3",
+    "npm:postgres@^3.4.9": "3.4.9",
     "npm:typescript@~5.9.3": "5.9.3",
     "npm:vite@*": "8.3.5",
     "npm:vite@^8.3.5": "8.3.5",
@@ -89,6 +91,9 @@
         "@babel/helper-string-parser",
         "@babel/helper-validator-identifier"
       ]
+    },
+    "@electric-sql/pglite@0.5.11": {
+      "integrity": "sha512-SWuqsTjA4DDWqgZ05PC1RJaq8e00p5KACxbqaikDFQ8dIGA0SLRzuPniky7IW+q/c5RDNMdEXwv7mFBWIx9Hxw=="
     },
     "@jridgewell/sourcemap-codec@1.6.0": {
       "integrity": "sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw=="
@@ -415,6 +420,9 @@
         "source-map-js"
       ]
     },
+    "postgres@3.4.9": {
+      "integrity": "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="
+    },
     "rolldown@1.2.15": {
       "integrity": "sha512-6odND+fel5zVw3I4Yc2e69gvguDnX0CAAGiNDZSq4ik5WUcaLrkD2GLuog0XcODbor31hZ5ayEMgVDno+KPV5g==",
       "dependencies": [
@@ -498,7 +506,9 @@
   "workspace": {
     "dependencies": [
       "jsr:@std/http@1",
+      "npm:@electric-sql/pglite@~0.5.11",
       "npm:@vitejs/plugin-vue@^6.0.10",
+      "npm:postgres@^3.4.9",
       "npm:typescript@~5.9.3",
       "npm:vite@^8.3.5",
       "npm:vue-tsc@^3.3.13",

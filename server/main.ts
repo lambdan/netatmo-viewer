@@ -3,11 +3,12 @@ import type {
   MonthlyResponse,
   RecordsResponse,
   SeriesResponse,
+  SetupRequest,
   WeatherData,
 } from "../shared/types.ts";
-import { Netatmo } from "./netatmo.ts";
+import { AuthError, Netatmo, type NetatmoApp, type Tokens } from "./netatmo.ts";
 import { demoData, seedDemoArchive } from "./demo.ts";
-import { Archive, isMetric } from "./db.ts";
+import { Archive, connect, isMetric, memoryDb } from "./db.ts";
 import { Sync } from "./sync.ts";
 
 const env = (k: string) => Deno.env.get(k) || undefined;
@@ -16,25 +17,44 @@ const PORT = Number(env("PORT") ?? 8080);
 // Netatmo stations upload every ~10 minutes, so polling more often than this is pointless.
 const POLL_MS = Math.max(60, Number(env("POLL_SECONDS") ?? 300)) * 1000;
 const STATIC_DIR = env("STATIC_DIR") ?? "./dist";
-const DEMO = env("DEMO") === "1" || !env("NETATMO_CLIENT_ID");
+const DEMO = env("DEMO") === "1";
+const DATABASE_URL = env("DATABASE_URL");
 
-const DATA_DIR = env("DATA_DIR") ?? "./data";
+if (!DEMO && !DATABASE_URL) {
+  console.error("DATABASE_URL is required, e.g. postgres://user:password@host:5432/netatmo");
+  Deno.exit(1);
+}
+
+// Demo mode runs Postgres in-process (PGlite), so it needs no database server.
+const archive = new Archive(DEMO ? await memoryDb() : await connect(DATABASE_URL!));
+
+// The database may still be starting (e.g. when started together with docker compose).
+for (let attempt = 1;; attempt++) {
+  try {
+    await archive.init();
+    break;
+  } catch (e) {
+    const wait = Math.min(30, attempt * 2);
+    console.warn(`Database not ready (${(e as Error).message}), retrying in ${wait}s`);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+  }
+}
+if (DEMO) await seedDemoArchive(archive);
+
+// Netatmo app credentials come from the env if set there, otherwise from the setup form.
+const APP_SETTING = "netatmo_app";
+const envApp: NetatmoApp | undefined = env("NETATMO_CLIENT_ID") && env("NETATMO_CLIENT_SECRET")
+  ? { clientId: env("NETATMO_CLIENT_ID")!, clientSecret: env("NETATMO_CLIENT_SECRET")! }
+  : undefined;
 
 const netatmo = DEMO ? undefined : new Netatmo({
-  clientId: env("NETATMO_CLIENT_ID")!,
-  clientSecret: env("NETATMO_CLIENT_SECRET") ?? "",
+  ...(envApp ?? await archive.getSetting<NetatmoApp>(APP_SETTING)),
   initialRefreshToken: env("NETATMO_REFRESH_TOKEN"),
-  dataDir: DATA_DIR,
+  tokenStore: {
+    load: () => archive.getSetting<Tokens>("netatmo_tokens"),
+    save: (tokens) => archive.setSetting("netatmo_tokens", tokens),
+  },
 });
-
-let archive: Archive;
-if (netatmo) {
-  await Deno.mkdir(DATA_DIR, { recursive: true });
-  archive = new Archive(`${DATA_DIR}/netatmo.sqlite`);
-} else {
-  archive = new Archive(":memory:");
-  seedDemoArchive(archive);
-}
 const sync = netatmo ? new Sync(netatmo, archive) : undefined;
 
 let cache: WeatherData | undefined;
@@ -45,24 +65,97 @@ async function poll() {
     cache = demoData();
     return;
   }
+  if (!netatmo.configured) {
+    cache = { ...emptyData(), setup: { state: "required", fromEnv: false } };
+    return;
+  }
   try {
     const { data, setupAt } = await netatmo.stations();
     await sync.update(data.modules, setupAt);
 
-    // The 24h chart comes from the local archive, in 30 minute buckets.
-    const since = Math.floor(Date.now() / 1000) - 24 * 3600;
+    // The 24h chart comes from the archive, in 30 minute buckets. If the database is having
+    // trouble, still show the current readings.
+    const now = Math.floor(Date.now() / 1000);
     for (const m of data.modules) {
-      if (m.temperature !== undefined) m.history = archive.temperatureHistory(m.id, since, 1800);
+      if (m.temperature === undefined) continue;
+      try {
+        const points = await archive.series(
+          m.id,
+          "temperature",
+          now - 24 * 3600,
+          now + 1,
+          1800,
+          "UTC",
+        );
+        m.history = points.map(([t, avg]) => [t, Math.round(avg * 10) / 10]);
+      } catch (e) {
+        console.warn(`24h history for ${m.name} failed:`, (e as Error).message);
+      }
     }
 
     cache = data;
   } catch (e) {
     const error = (e as Error).message;
     console.error("Netatmo fetch failed:", error);
-    cache = cache
-      ? { ...cache, error }
-      : { stationName: "Weather", fetchedAt: 0, modules: [], error };
+    const setup = e instanceof AuthError
+      ? { state: "rejected" as const, fromEnv: !!envApp }
+      : undefined;
+    cache = { ...(cache ?? emptyData()), error, setup };
   }
+}
+
+function emptyData(): WeatherData {
+  return { stationName: "Weather", fetchedAt: 0, modules: [] };
+}
+
+/** Checks credentials against Netatmo and, if they work, switches to them. */
+async function setup(req: Request): Promise<Response> {
+  if (!netatmo) return json({ error: "Not available in demo mode" }, 404);
+  if (envApp) {
+    return json(
+      { error: "Credentials are set with environment variables; change them there." },
+      403,
+    );
+  }
+  // Once it works, the form is closed so nobody else on the network can swap the account.
+  if (netatmo.configured && cache?.setup?.state !== "rejected") {
+    return json({ error: "Already set up" }, 403);
+  }
+
+  const body = await req.json().catch(() => ({})) as Partial<SetupRequest>;
+  const app = {
+    clientId: body.clientId?.trim() ?? "",
+    clientSecret: body.clientSecret?.trim() ?? "",
+  };
+  const refreshToken = body.refreshToken?.trim() ?? "";
+  if (!app.clientId || !app.clientSecret || !refreshToken) {
+    return json({ error: "All three fields are required" }, 400);
+  }
+
+  const probe = new Netatmo({
+    ...app,
+    initialRefreshToken: refreshToken,
+    tokenStore: { load: () => Promise.resolve(undefined), save: () => Promise.resolve() },
+  });
+  try {
+    await probe.stations();
+  } catch (e) {
+    const msg = (e as Error).message;
+    const error = msg.includes("invalid_client")
+      ? "Netatmo didn't accept the client ID or client secret."
+      : msg.includes("invalid_grant")
+      ? "Netatmo didn't accept the refresh token. Generate a new one and try again."
+      : `Netatmo said: ${msg}`;
+    return json({ error }, 400);
+  }
+
+  await archive.setSetting(APP_SETTING, app);
+  await netatmo.configure(app, probe.tokens!);
+  console.log("Netatmo credentials set up from the web page");
+  // Let any poll still using the old credentials finish, then fetch with the new ones.
+  await inflight;
+  await refresh();
+  return json({ ok: true });
 }
 
 function refresh(): Promise<void> {
@@ -73,8 +166,47 @@ function refresh(): Promise<void> {
 refresh();
 setInterval(refresh, POLL_MS);
 
-function json(body: unknown) {
-  return Response.json(body, { headers: { "Cache-Control": "no-store" } });
+function json(body: unknown, status = 200) {
+  return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+async function archiveApi(pathname: string, q: URLSearchParams): Promise<Response> {
+  if (pathname === "/api/archive") return json(await archive.stats());
+
+  const moduleId = q.get("module") ?? "";
+  const metric = q.get("metric");
+  if (!isMetric(metric)) return json({ error: "bad metric" }, 400);
+  const num = (k: string) => Number(q.get(k) ?? 0) || 0;
+  // IANA time zone of the viewer, e.g. Europe/Stockholm; Postgres validates it.
+  const tz = q.get("tz") || "UTC";
+
+  if (pathname === "/api/history") {
+    const body: SeriesResponse = {
+      points: await archive.series(moduleId, metric, num("from"), num("to"), num("bucket"), tz),
+    };
+    return json(body);
+  }
+  if (pathname === "/api/records") {
+    const [since, state, today, month, year, all] = await Promise.all([
+      archive.oldest(moduleId),
+      archive.state(moduleId),
+      archive.extremes(moduleId, metric, num("today")),
+      archive.extremes(moduleId, metric, num("month")),
+      archive.extremes(moduleId, metric, num("year")),
+      archive.extremes(moduleId, metric),
+    ]);
+    const body: RecordsResponse = {
+      since,
+      complete: DEMO || state.backfillDone,
+      periods: { today, month, year, all },
+    };
+    return json(body);
+  }
+  if (pathname === "/api/monthly") {
+    const body: MonthlyResponse = { months: await archive.monthly(moduleId, metric, tz) };
+    return json(body);
+  }
+  return json({ error: "not found" }, 404);
 }
 
 console.log(
@@ -82,42 +214,20 @@ console.log(
 );
 
 Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
-  const { pathname } = new URL(req.url);
+  const url = new URL(req.url);
+  const { pathname } = url;
 
   if (pathname === "/api/weather") {
     if (!cache) await refresh();
-    return Response.json(cache, { headers: { "Cache-Control": "no-store" } });
+    return json(cache);
   }
-  if (pathname === "/api/archive") return json(archive.stats());
+  if (pathname === "/api/setup" && req.method === "POST") return setup(req);
   if (pathname.startsWith("/api/")) {
-    const q = new URL(req.url).searchParams;
-    const moduleId = q.get("module") ?? "";
-    const metric = q.get("metric");
-    if (!isMetric(metric)) return new Response("bad metric", { status: 400 });
-    const num = (k: string) => Number(q.get(k) ?? 0) || 0;
-
-    if (pathname === "/api/history") {
-      const body: SeriesResponse = {
-        points: archive.series(moduleId, metric, num("from"), num("to"), num("bucket"), num("tz")),
-      };
-      return json(body);
-    }
-    if (pathname === "/api/records") {
-      const body: RecordsResponse = {
-        since: archive.oldest(moduleId),
-        complete: !netatmo || archive.state(moduleId).backfillDone,
-        periods: {
-          today: archive.extremes(moduleId, metric, num("today")),
-          month: archive.extremes(moduleId, metric, num("month")),
-          year: archive.extremes(moduleId, metric, num("year")),
-          all: archive.extremes(moduleId, metric),
-        },
-      };
-      return json(body);
-    }
-    if (pathname === "/api/monthly") {
-      const body: MonthlyResponse = { months: archive.monthly(moduleId, metric, num("tz")) };
-      return json(body);
+    try {
+      return await archiveApi(pathname, url.searchParams);
+    } catch (e) {
+      console.warn(`${pathname} failed:`, (e as Error).message);
+      return json({ error: (e as Error).message }, 500);
     }
   }
   if (pathname === "/healthz") return new Response("ok");

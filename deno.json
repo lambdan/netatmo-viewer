@@ -2,9 +2,9 @@
   "nodeModulesDir": "auto",
   "tasks": {
     "dev": "deno run -A npm:vite",
-    "dev:server": "deno run --allow-net --allow-env --allow-read --allow-write --watch server/main.ts",
+    "dev:server": "deno run --allow-net --allow-env --allow-read --watch server/main.ts",
     "build": "deno run -A npm:vite build",
-    "start": "deno run --allow-net --allow-env --allow-read --allow-write server/main.ts",
+    "start": "deno run --allow-net --allow-env --allow-read server/main.ts",
     "check": "deno check server/main.ts",
     "typecheck": "deno run -A npm:vue-tsc --noEmit -p tsconfig.json"
   },
@@ -14,7 +14,9 @@
     "@vitejs/plugin-vue": "npm:@vitejs/plugin-vue@^6.0.10",
     "@std/http": "jsr:@std/http@^1",
     "typescript": "npm:typescript@~5.9.3",
-    "vue-tsc": "npm:vue-tsc@^3.3.13"
+    "vue-tsc": "npm:vue-tsc@^3.3.13",
+    "postgres": "npm:postgres@^3.4.9",
+    "@electric-sql/pglite": "npm:@electric-sql/pglite@^0.5.11"
   },
   "compilerOptions": {
     "lib": [

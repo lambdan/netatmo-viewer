@@ -5,6 +5,7 @@ import { ago, clockTime, dateLine } from "./format.ts";
 import ModuleCard from "./components/ModuleCard.vue";
 import HistoryView from "./components/HistoryView.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import SetupView from "./components/SetupView.vue";
 import { isLight, lightAt, themeSettings } from "./theme.ts";
 
 const REFRESH_MS = 60 * 1000;
@@ -82,8 +83,9 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <SetupView v-if="data?.setup" :status="data.setup" :error="data.error" @done="load" />
   <HistoryView
-    v-if="view === 'history' && data && data.modules.length"
+    v-else-if="view === 'history' && data && data.modules.length"
     :modules="data.modules"
     :initial-module="historyModule"
     @close="closeHistory"

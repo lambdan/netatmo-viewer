@@ -10,7 +10,7 @@ import type {
 import { api } from "../api.ts";
 import { fixed, fmtDate } from "../format.ts";
 import { METRIC_INFO, metricsFor } from "../metrics.ts";
-import { periodFor, type RangeKind, recordStarts, shift } from "../period.ts";
+import { periodFor, type RangeKind, recordStarts, shift, timeZone } from "../period.ts";
 import { isLight } from "../theme.ts";
 import { buildYears, yearColor } from "../trends.ts";
 import HistoryChart from "./HistoryChart.vue";
@@ -75,10 +75,10 @@ async function load() {
   try {
     const [s, r, m] = await Promise.all([
       p
-        ? api.history({ ...base, from: p.from, to: p.to, bucket: p.bucket, tz: p.tzOffset })
+        ? api.history({ ...base, from: p.from, to: p.to, bucket: p.bucket, tz: timeZone })
         : undefined,
       api.records({ ...base, ...recordStarts() }),
-      p ? undefined : api.monthly({ ...base, tz: -new Date().getTimezoneOffset() * 60 }),
+      p ? undefined : api.monthly({ ...base, tz: timeZone }),
     ]);
     if (id !== seq) return; // a newer request is on its way
     series.value = s;

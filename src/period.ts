@@ -18,8 +18,6 @@ export interface Period {
   to: number;
   /** Seconds per chart point. */
   bucket: number;
-  /** Seconds east of UTC at the start of the period, for aligning day buckets. */
-  tzOffset: number;
   label: string;
   ticks: Tick[];
   tipFormat: Intl.DateTimeFormatOptions;
@@ -114,8 +112,11 @@ export function periodFor(kind: RangeKind, anchor: Date): Period {
 
   // Some locales (e.g. Swedish) don't capitalise weekdays and months.
   label = label.charAt(0).toUpperCase() + label.slice(1);
-  return { kind, from, to, bucket, tzOffset: -start.getTimezoneOffset() * 60, label, ticks, tipFormat };
+  return { kind, from, to, bucket, label, ticks, tipFormat };
 }
+
+/** The viewer's IANA time zone, so the server can bucket by local days and months. */
+export const timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 /** Start of today, this month and this year, for the records query. */
 export function recordStarts(now = new Date()) {

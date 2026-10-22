@@ -48,6 +48,22 @@ export interface WeatherData {
   /** Set when the latest fetch failed; modules then hold the last good data. */
   error?: string;
   demo?: boolean;
+  /** Set when Netatmo credentials need to be entered (again). */
+  setup?: SetupStatus;
+}
+
+export interface SetupStatus {
+  /** "required": nothing configured yet; "rejected": Netatmo no longer accepts the login. */
+  state: "required" | "rejected";
+  /** Credentials come from environment variables, so they can't be changed from the page. */
+  fromEnv: boolean;
+}
+
+/** POST /api/setup */
+export interface SetupRequest {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
 }
 
 export type Metric = "temperature" | "humidity" | "co2" | "pressure" | "noise";

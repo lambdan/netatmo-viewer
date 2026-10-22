@@ -9,10 +9,10 @@ async function get<T>(path: string, params: Record<string, string | number>): Pr
 }
 
 export const api = {
-  history: (q: { module: string; metric: Metric; from: number; to: number; bucket: number; tz: number }) =>
+  history: (q: { module: string; metric: Metric; from: number; to: number; bucket: number; tz: string }) =>
     get<SeriesResponse>("/api/history", q),
   records: (q: { module: string; metric: Metric; today: number; month: number; year: number }) =>
     get<RecordsResponse>("/api/records", q),
-  monthly: (q: { module: string; metric: Metric; tz: number }) =>
+  monthly: (q: { module: string; metric: Metric; tz: string }) =>
     get<MonthlyResponse>("/api/monthly", q),
 };
