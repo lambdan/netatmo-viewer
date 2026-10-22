@@ -70,9 +70,14 @@ export class Netatmo {
       refreshToken: json.refresh_token ?? refreshToken,
       expiresAt: Date.now() + (json.expires_in - 60) * 1000,
     };
-    await Deno.mkdir(this.config.dataDir, { recursive: true });
-    await Deno.writeTextFile(this.#tokenFile, JSON.stringify(tokens, null, 2));
     this.#tokens = tokens;
+    try {
+      await Deno.mkdir(this.config.dataDir, { recursive: true });
+      await Deno.writeTextFile(this.#tokenFile, JSON.stringify(tokens, null, 2));
+    } catch (e) {
+      // Not fatal: the tokens still work from memory, they just won't survive a restart.
+      console.warn(`Could not save tokens to ${this.#tokenFile}:`, (e as Error).message);
+    }
     return tokens;
   }
 
