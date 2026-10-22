@@ -224,21 +224,24 @@ async function archiveApi(pathname: string, q: URLSearchParams): Promise<Respons
   return json({ error: "not found" }, 404);
 }
 
-/** GET /api/events, POST /api/events {at, label, moduleId?}, DELETE /api/events/:id */
+/** GET /api/events, POST /api/events {at, label, moduleIds}, DELETE /api/events/:id */
 async function eventsApi(req: Request, pathname: string): Promise<Response> {
   if (pathname === "/api/events" && req.method === "GET") return json(await archive.events());
   if (pathname === "/api/events" && req.method === "POST") {
     const body = await req.json().catch(() => ({}));
     const at = Number(body.at);
     const label = String(body.label ?? "").trim().slice(0, 100);
-    const moduleId = typeof body.moduleId === "string" && body.moduleId ? body.moduleId : null;
+    const moduleIds: string[] = Array.isArray(body.moduleIds)
+      ? body.moduleIds.filter((id: unknown) => typeof id === "string" && id)
+      : [];
     // Netatmo weather stations exist since 2012; allow a bit of future for planned moves.
     if (!label || !(at > Date.UTC(2012, 0, 1) / 1000 && at < Date.now() / 1000 + 366 * 86400)) {
       return json({ error: "An event needs a label and a date" }, 400);
     }
-    const event = await archive.addEvent(at, label, moduleId);
+    if (!moduleIds.length) return json({ error: "Pick at least one module" }, 400);
+    const event = await archive.addEvent(at, label, moduleIds);
     console.log(
-      `Added event "${event.label}" for ${moduleId ?? "all modules"} at ` +
+      `Added event "${event.label}" for ${moduleIds.join(", ")} at ` +
         new Date(event.at * 1000).toISOString(),
     );
     return json(event);

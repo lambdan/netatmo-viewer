@@ -7,8 +7,8 @@ import { fmtDate } from "../format.ts";
 const props = defineProps<{ events: StationEvent[]; modules: Module[]; currentModule: string }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
 
-/** "" = all modules */
-const moduleId = ref(props.currentModule);
+/** Which modules the new event affected; starts with the one being viewed. */
+const moduleIds = ref<string[]>([props.currentModule]);
 const date = ref("");
 const label = ref("Moved");
 const error = ref<string>();
@@ -22,15 +22,19 @@ async function add() {
     return;
   }
   const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() / 1000;
-  await run(() => api.addEvent(at, label.value, moduleId.value || null));
+  if (!moduleIds.value.length) {
+    error.value = "Tick at least one module";
+    return;
+  }
+  await run(() => api.addEvent(at, label.value, moduleIds.value));
   if (!error.value) {
     date.value = "";
     label.value = "Moved";
   }
 }
 
-function moduleName(id: string | null) {
-  return id === null ? "All modules" : props.modules.find((m) => m.id === id)?.name ?? "Unknown module";
+function moduleNames(ids: string[]) {
+  return ids.map((id) => props.modules.find((m) => m.id === id)?.name ?? "Unknown module").join(", ");
 }
 
 async function remove(e: StationEvent) {
@@ -56,22 +60,23 @@ async function run(fn: () => Promise<unknown>) {
     <div class="panel">
       <h2>Events</h2>
       <p class="note">
-        Marked on the history charts, e.g. when a module was moved to another room. Events for
-        "All modules" (like moving house) show up on every module.
+        Marked on the history charts of the modules they affected, e.g. moving a module to another
+        room, or moving house.
       </p>
 
       <div v-for="e in events.slice().reverse()" :key="e.id" class="event">
         <span class="when">{{ fmtDate(e.at, { day: "numeric", month: "short", year: "numeric" }) }}</span>
-        <span class="label">{{ e.label }}<small>{{ moduleName(e.moduleId) }}</small></span>
+        <span class="label">{{ e.label }}<small>{{ moduleNames(e.moduleIds) }}</small></span>
         <button class="delete" :disabled="busy" @click="remove(e)" aria-label="Delete">×</button>
       </div>
       <p v-if="!events.length" class="note">No events yet.</p>
 
       <form class="add" @submit.prevent="add">
-        <select v-model="moduleId">
-          <option v-for="m in modules" :key="m.id" :value="m.id">{{ m.name }}</option>
-          <option value="">All modules</option>
-        </select>
+        <div class="modules">
+          <label v-for="m in modules" :key="m.id" :class="{ checked: moduleIds.includes(m.id) }">
+            <input type="checkbox" :value="m.id" v-model="moduleIds" />{{ m.name }}
+          </label>
+        </div>
         <input type="date" v-model="date" />
         <input type="text" v-model="label" maxlength="100" placeholder="What happened" />
         <button type="submit" :disabled="busy || !label.trim()">Add</button>
@@ -172,24 +177,33 @@ button {
 .add > * {
   margin-bottom: 8px;
 }
-select {
+.modules {
   -webkit-flex: 1 0 100%;
   flex: 1 0 100%;
-  padding: 9px 11px;
+}
+.modules label {
+  display: inline-block;
+  margin: 0 8px 4px 0;
+  padding: 7px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-  -webkit-appearance: none;
-  /* A small chevron, since the native one is hidden */
-  padding-right: 34px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23889' stroke-width='2'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 13px center;
+  font-size: 15px;
+  color: var(--muted);
+  cursor: pointer;
 }
-input {
+.modules label.checked {
+  border-color: var(--text);
+  color: var(--text);
+}
+.modules input {
+  margin: 0 7px 0 0;
+  padding: 0;
+  vertical-align: -1px;
+  -webkit-appearance: checkbox;
+}
+input[type="date"],
+input[type="text"] {
   min-width: 0;
   margin-right: 8px;
   padding: 9px 11px;

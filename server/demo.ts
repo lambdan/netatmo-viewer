@@ -118,8 +118,8 @@ export async function seedDemoArchive(archive: Archive) {
   await archive.insert("outdoor", ["temperature", "humidity"], outdoor);
   await archive.insert("base", ["temperature", "humidity", "co2", "pressure", "noise"], living);
   await archive.insert("bedroom", ["temperature", "humidity", "co2"], bedroom);
-  await archive.addEvent(now - 400 * 24 * 3600, "Moved to the new house", null);
-  await archive.addEvent(now - 120 * 24 * 3600, "Moved next to the window", "bedroom");
+  await archive.addEvent(now - 400 * 24 * 3600, "Moved to the new house", ["base", "outdoor"]);
+  await archive.addEvent(now - 120 * 24 * 3600, "Moved next to the window", ["bedroom"]);
 }
 
 const round = (v: number) => Math.round(v * 10) / 10;

@@ -27,8 +27,8 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 
 export const api = {
   events: () => get<StationEvent[]>("/api/events", {}),
-  addEvent: (at: number, label: string, moduleId: string | null) =>
-    send<StationEvent>("POST", "/api/events", { at, label, moduleId }),
+  addEvent: (at: number, label: string, moduleIds: string[]) =>
+    send<StationEvent>("POST", "/api/events", { at, label, moduleIds }),
   deleteEvent: (id: number) => send<{ ok: true }>("DELETE", `/api/events/${id}`),
   history: (q: { module: string; metric: Metric; from: number; to: number; bucket: number; tz: string }) =>
     get<SeriesResponse>("/api/history", q),

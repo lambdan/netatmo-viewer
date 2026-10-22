@@ -91,8 +91,8 @@ const SCHEMA = `
     id serial PRIMARY KEY,
     at timestamptz NOT NULL,
     label text NOT NULL,
-    -- NULL = applies to all modules
-    module_id text REFERENCES modules (id),
+    -- The modules it affected
+    module_ids text[] NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
   );
 `;
@@ -254,15 +254,15 @@ export class Archive {
 
   events(): Promise<StationEvent[]> {
     return this.db.query<StationEvent>(
-      `SELECT id, ${epoch("at")} AS at, label, module_id AS "moduleId" FROM events ORDER BY at`,
+      `SELECT id, ${epoch("at")} AS at, label, module_ids AS "moduleIds" FROM events ORDER BY at`,
     );
   }
 
-  async addEvent(at: number, label: string, moduleId: string | null): Promise<StationEvent> {
+  async addEvent(at: number, label: string, moduleIds: string[]): Promise<StationEvent> {
     const [e] = await this.db.query<StationEvent>(
-      `INSERT INTO events (at, label, module_id) VALUES (to_timestamp($1::float8), $2, $3)
-       RETURNING id, ${epoch("at")} AS at, label, module_id AS "moduleId"`,
-      [at, label, moduleId],
+      `INSERT INTO events (at, label, module_ids) VALUES (to_timestamp($1::float8), $2, $3::text[])
+       RETURNING id, ${epoch("at")} AS at, label, module_ids AS "moduleIds"`,
+      [at, label, moduleIds],
     );
     return e;
   }

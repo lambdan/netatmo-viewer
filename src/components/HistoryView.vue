@@ -106,10 +106,8 @@ async function loadEvents() {
 }
 loadEvents();
 
-/** This module's events plus the ones for all modules. */
-const moduleEvents = computed(() =>
-  events.value.filter((e) => e.moduleId === null || e.moduleId === moduleId.value)
-);
+/** Events that affected the module being viewed. */
+const moduleEvents = computed(() => events.value.filter((e) => e.moduleIds.includes(moduleId.value)));
 
 function eventsIn(year: number) {
   return moduleEvents.value.filter((e) => new Date(e.at * 1000).getFullYear() === year);

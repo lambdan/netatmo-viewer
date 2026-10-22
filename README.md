@@ -76,8 +76,8 @@ or starts charging for it.
   min–max bands, records (coldest/warmest today, this month, this year, ever), and a **Years**
   view comparing monthly averages year over year. It goes back to the live view after 3
   minutes without a touch.
-- **Events** (in the History view) mark things like moving a module to another room, or moving
-  house (an event for all modules): a dashed line on the charts and a note on that year in the
+- **Events** (in the History view) mark things like moving a module to another room or moving
+  house, for the modules you tick: a dashed line on their charts and a note on that year in the
   Years view. Stored in the `events` table.
 
 Tables (created automatically):

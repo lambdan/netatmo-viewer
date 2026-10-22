@@ -96,6 +96,6 @@ export interface StationEvent {
   /** Unix seconds */
   at: number;
   label: string;
-  /** The module it's about; null applies to all modules (e.g. moving house). */
-  moduleId: string | null;
+  /** The modules it affected (only those, so modules added later aren't included). */
+  moduleIds: string[];
 }
