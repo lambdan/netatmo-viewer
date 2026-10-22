@@ -137,8 +137,15 @@ const years = computed(() =>
   monthly.value ? buildYears(monthly.value.months, (m) => monthNames[m]) : []
 );
 
+/** The delta as shown, so "+0.0" isn't coloured as a rise. */
+function rounded(v: number) {
+  const f = Math.pow(10, info.value.decimals);
+  return Math.round(v * f) / f;
+}
+
 function signed(v: number) {
-  return `${v > 0 ? "+" : v < 0 ? "−" : "±"}${fixed(Math.abs(v), info.value.decimals)}`;
+  const r = rounded(v);
+  return `${r > 0 ? "+" : r < 0 ? "−" : "±"}${fixed(Math.abs(r), info.value.decimals)}`;
 }
 
 // --- swipe left/right (outside the chart) to change period ---
@@ -184,20 +191,20 @@ onUnmounted(() => clearTimeout(idleTimer));
       <Segmented v-if="metricOptions.length > 1" :options="metricOptions" v-model="metric" />
     </header>
 
-    <div class="controls">
-      <Segmented :options="viewOptions" v-model="view" />
-      <div class="nav" v-if="period">
-        <button @click="step(-1)">‹</button>
-        <span class="label">{{ period.label }}</span>
-        <button @click="step(1)" :disabled="!canGoForward">›</button>
-      </div>
-      <div class="nav" v-else>
-        <span class="label">Monthly averages, year by year</span>
-      </div>
-    </div>
-
     <main class="body">
       <section class="card main">
+        <!-- Everything that controls the chart lives in its card, apart from the records. -->
+        <div class="chart-head">
+          <Segmented :options="viewOptions" v-model="view" />
+          <div class="nav" v-if="period">
+            <button @click="step(-1)">‹</button>
+            <span class="label">{{ period.label }}</span>
+            <button @click="step(1)" :disabled="!canGoForward">›</button>
+          </div>
+          <div class="nav" v-else>
+            <span class="label">Monthly averages, year by year</span>
+          </div>
+        </div>
         <div class="summary" v-if="period">
           <template v-if="summary">
             <span><small>Low</small> {{ fixed(summary.lo, info.decimals) }}{{ info.unit }}</span>
@@ -242,7 +249,7 @@ onUnmounted(() => clearTimeout(idleTimer));
               </span>
             </span>
             <strong>{{ y.avg === undefined ? "–" : fixed(y.avg, info.decimals) + info.unit }}</strong>
-            <span class="delta" :class="{ up: (y.delta ?? 0) > 0, down: (y.delta ?? 0) < 0 }">
+            <span class="delta" :class="{ up: rounded(y.delta ?? 0) > 0, down: rounded(y.delta ?? 0) < 0 }">
               {{ y.delta === undefined ? "" : signed(y.delta) }}
             </span>
           </div>
@@ -281,7 +288,7 @@ onUnmounted(() => clearTimeout(idleTimer));
   padding: 14px 20px 16px;
 }
 .top,
-.controls {
+.chart-head {
   display: -webkit-flex;
   display: flex;
   -webkit-flex-wrap: wrap;
@@ -292,8 +299,19 @@ onUnmounted(() => clearTimeout(idleTimer));
   justify-content: space-between;
 }
 .top > *,
-.controls > * {
+.chart-head > * {
   margin-bottom: 12px;
+}
+.chart-head {
+  padding-left: 12px;
+}
+/* Inside the card, the controls need the page background to stand out. */
+.chart-head :deep(.segmented),
+.chart-head .nav button {
+  background: var(--bg);
+}
+.chart-head :deep(.segmented button.active) {
+  background: var(--card);
 }
 button {
   border: 0;
@@ -339,10 +357,10 @@ button {
   opacity: 0.3;
 }
 .nav .label {
-  min-width: 250px;
+  min-width: 200px;
   padding: 0 12px;
   text-align: center;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .body {

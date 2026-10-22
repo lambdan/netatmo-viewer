@@ -72,7 +72,8 @@ export function periodFor(kind: RangeKind, anchor: Date): Period {
   switch (kind) {
     case "day":
       bucket = 600;
-      label = fmtDate(from, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      // Short, so it fits next to the range buttons in the chart card.
+      label = fmtDate(from, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
       tipFormat = { hour: "2-digit", minute: "2-digit" };
       for (let h = 3; h < 24; h += 3) {
         const t = new Date(y, m, d, h);
