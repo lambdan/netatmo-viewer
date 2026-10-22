@@ -71,7 +71,7 @@ export class Netatmo {
     return { accessToken: "", refreshToken: this.config.initialRefreshToken, expiresAt: 0 };
   }
 
-  async #refresh(refreshToken: string): Promise<Tokens> {
+  async #refresh(refreshToken: string, reason: string): Promise<Tokens> {
     const res = await fetch(`${API}/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
@@ -98,6 +98,12 @@ export class Netatmo {
       refreshToken: json.refresh_token ?? refreshToken,
       expiresAt: Date.now() + (json.expires_in - 60) * 1000,
     };
+    console.log(
+      `Refreshed Netatmo access token (${reason}), valid for ${
+        Math.round(json.expires_in / 60)
+      } min` +
+        (tokens.refreshToken !== refreshToken ? "; Netatmo also issued a new refresh token" : ""),
+    );
     this.#tokens = tokens;
     try {
       await this.config.tokenStore.save(tokens);
@@ -108,12 +114,18 @@ export class Netatmo {
     return tokens;
   }
 
-  async #accessToken(forceRefresh = false): Promise<string> {
+  /** `rejected` is Netatmo's complaint about the current token, which forces a refresh. */
+  async #accessToken(rejected?: string): Promise<string> {
     // Polling and the backfill run concurrently; make them share a single refresh.
     if (this.#refreshing) return (await this.#refreshing).accessToken;
     const tokens = await this.#loadTokens();
-    if (forceRefresh || Date.now() >= tokens.expiresAt) {
-      this.#refreshing = this.#refreshWithFallback(tokens).finally(() => {
+    if (rejected || Date.now() >= tokens.expiresAt) {
+      const reason = rejected
+        ? `Netatmo rejected the old one: ${rejected}`
+        : tokens.accessToken
+        ? "the old one expired"
+        : "first use";
+      this.#refreshing = this.#refreshWithFallback(tokens, reason).finally(() => {
         this.#refreshing = undefined;
       });
       return (await this.#refreshing).accessToken;
@@ -121,21 +133,21 @@ export class Netatmo {
     return tokens.accessToken;
   }
 
-  async #refreshWithFallback(tokens: Tokens): Promise<Tokens> {
+  async #refreshWithFallback(tokens: Tokens, reason: string): Promise<Tokens> {
     const fallback = this.config.initialRefreshToken;
     try {
-      return await this.#refresh(tokens.refreshToken);
+      return await this.#refresh(tokens.refreshToken, reason);
     } catch (e) {
       // A stored token that no longer works can be replaced by putting a new one in the env.
       if (!fallback || fallback === tokens.refreshToken) throw e;
       console.warn("Stored refresh token rejected, trying NETATMO_REFRESH_TOKEN");
-      return await this.#refresh(fallback);
+      return await this.#refresh(fallback, reason);
     }
   }
 
   // deno-lint-ignore no-explicit-any
-  async #get(path: string, params: Record<string, string> = {}, retried = false): Promise<any> {
-    const token = await this.#accessToken(retried);
+  async #get(path: string, params: Record<string, string> = {}, rejected?: string): Promise<any> {
+    const token = await this.#accessToken(rejected);
     const res = await fetch(`${API}${path}?${new URLSearchParams(params)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -143,14 +155,16 @@ export class Netatmo {
     if (!res.ok) {
       const code = json?.error?.code;
       // 2 = invalid token, 3 = expired token
-      if (!retried && (code === 2 || code === 3)) return this.#get(path, params, true);
+      if (!rejected && (code === 2 || code === 3)) {
+        return this.#get(path, params, `${json.error.message} (code ${code})`);
+      }
       throw new NetatmoError(json?.error?.message ?? res.statusText, res.status, code);
     }
     return json.body;
   }
 
-  /** Current readings, plus when the station was set up (unix seconds). */
-  async stations(): Promise<{ data: WeatherData; setupAt?: number }> {
+  /** Current readings of the (first) station and its modules. */
+  async stations(): Promise<WeatherData> {
     const body = await this.#get("/api/getstationsdata");
     const device = body.devices?.[0];
     if (!device) throw new Error("No weather station found on this account");
@@ -163,12 +177,9 @@ export class Netatmo {
     modules[0].reachable = device.reachable !== false;
 
     return {
-      data: {
-        stationName: device.home_name ?? device.station_name ?? "Weather",
-        fetchedAt: Date.now(),
-        modules,
-      },
-      setupAt: device.date_setup,
+      stationName: device.home_name ?? device.station_name ?? "Weather",
+      fetchedAt: Date.now(),
+      modules,
     };
   }
 

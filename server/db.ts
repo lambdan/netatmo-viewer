@@ -110,9 +110,10 @@ export class Archive {
     );
   }
 
-  /** Inserts rows, ignoring timestamps already stored. */
-  async insert(moduleId: string, columns: Column[], rows: Row[]) {
+  /** Inserts rows, ignoring timestamps already stored. Returns how many were new. */
+  async insert(moduleId: string, columns: Column[], rows: Row[]): Promise<number> {
     const width = columns.length + 2;
+    let added = 0;
     for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
       const chunk = rows.slice(i, i + INSERT_CHUNK);
       const params: unknown[] = [];
@@ -122,13 +123,16 @@ export class Archive {
         const cols = columns.map((_, c) => `$${n + 3 + c}::float8`);
         return `($${n + 1}, to_timestamp($${n + 2}::float8), ${cols.join(", ")})`;
       });
-      await this.db.query(
+      const inserted = await this.db.query(
         `INSERT INTO measurements (module_id, ts, ${columns.join(", ")})
          VALUES ${values.join(", ")}
-         ON CONFLICT (module_id, ts) DO NOTHING`,
+         ON CONFLICT (module_id, ts) DO NOTHING
+         RETURNING 1`,
         params,
       );
+      added += inserted.length;
     }
+    return added;
   }
 
   async state(moduleId: string): Promise<SyncState> {

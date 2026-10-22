@@ -1,5 +1,6 @@
 import { serveDir } from "@std/http/file-server";
 import type {
+  Module,
   MonthlyResponse,
   RecordsResponse,
   SeriesResponse,
@@ -70,8 +71,9 @@ async function poll() {
     return;
   }
   try {
-    const { data, setupAt } = await netatmo.stations();
-    await sync.update(data.modules, setupAt);
+    const data = await netatmo.stations();
+    console.log(`Polled ${data.stationName}: ${data.modules.map(describe).join(" · ")}`);
+    await sync.update(data.modules);
 
     // The 24h chart comes from the archive, in 30 minute buckets. If the database is having
     // trouble, still show the current readings.
@@ -102,6 +104,19 @@ async function poll() {
       : undefined;
     cache = { ...(cache ?? emptyData()), error, setup };
   }
+}
+
+/** One module's current readings for the log, e.g. "Köket 22.9° 37% 593ppm". */
+function describe(m: Module): string {
+  const parts = [m.name];
+  if (m.temperature !== undefined) parts.push(`${m.temperature}°`);
+  if (m.humidity !== undefined) parts.push(`${m.humidity}%`);
+  if (m.co2 !== undefined) parts.push(`${m.co2}ppm`);
+  if (m.pressure !== undefined) parts.push(`${m.pressure}mbar`);
+  if (m.rain1h !== undefined) parts.push(`${m.rain1h}mm/h`);
+  if (m.wind !== undefined) parts.push(`${m.wind}km/h`);
+  if (!m.reachable) parts.push("(offline)");
+  return parts.join(" ");
 }
 
 function emptyData(): WeatherData {
