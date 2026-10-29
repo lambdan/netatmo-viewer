@@ -68,30 +68,39 @@ const series = ref<SeriesResponse>();
 const records = ref<RecordsResponse>();
 const monthly = ref<MonthlyResponse>();
 const error = ref<string>();
-let seq = 0;
-
-async function load() {
-  const id = ++seq;
-  const base = { module: moduleId.value, metric: metric.value };
-  const p = period.value;
-  try {
-    const [s, r, m] = await Promise.all([
-      p
-        ? api.history({ ...base, from: p.from, to: p.to, bucket: p.bucket, tz: timeZone })
-        : undefined,
-      api.records({ ...base, ...recordStarts() }),
-      p ? undefined : api.monthly({ ...base, tz: timeZone }),
-    ]);
-    if (id !== seq) return; // a newer request is on its way
-    series.value = s;
-    records.value = r;
-    monthly.value = m;
-    error.value = undefined;
-  } catch (e) {
-    if (id === seq) error.value = `Couldn't load history (${(e as Error).message})`;
-  }
+/** Each part loads on its own, so the chart doesn't wait for the records and vice versa. */
+function loader<T>(fetch: () => Promise<T> | undefined, target: { value: T | undefined }) {
+  let seq = 0;
+  return async () => {
+    const id = ++seq;
+    try {
+      const value = await fetch();
+      if (id !== seq) return; // a newer request is on its way
+      target.value = value;
+      error.value = undefined;
+    } catch (e) {
+      if (id === seq) error.value = `Couldn't load history (${(e as Error).message})`;
+    }
+  };
 }
-watch([moduleId, metric, () => period.value?.from, view], load, { immediate: true });
+
+const base = () => ({ module: moduleId.value, metric: metric.value });
+const loadSeries = loader(() => {
+  const p = period.value;
+  return p
+    ? api.history({ ...base(), from: p.from, to: p.to, bucket: p.bucket, tz: timeZone })
+    : undefined;
+}, series);
+const loadMonthly = loader(
+  () => (view.value === "years" ? api.monthly({ ...base(), tz: timeZone }) : undefined),
+  monthly,
+);
+// Records don't depend on the period being viewed.
+const loadRecords = loader(() => api.records({ ...base(), ...recordStarts() }), records);
+
+watch([moduleId, metric, () => period.value?.from, view], loadSeries, { immediate: true });
+watch([moduleId, metric, view], loadMonthly, { immediate: true });
+watch([moduleId, metric], loadRecords, { immediate: true });
 
 // --- events (e.g. station moves) ---
 

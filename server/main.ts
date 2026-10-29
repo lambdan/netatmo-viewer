@@ -288,6 +288,16 @@ console.log(
 
 Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   const url = new URL(req.url);
+  const started = performance.now();
+  const res = await handle(req, url);
+  const ms = Math.round(performance.now() - started);
+  if (url.pathname.startsWith("/api/") && ms > 500) {
+    console.log(`Slow request: ${url.pathname}${url.search} took ${ms} ms`);
+  }
+  return res;
+});
+
+async function handle(req: Request, url: URL): Promise<Response> {
   const { pathname } = url;
 
   if (pathname === "/api/weather") {
@@ -317,4 +327,4 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
     pathname.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache",
   );
   return new Response(res.body, { status: res.status, headers });
-});
+}

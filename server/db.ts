@@ -95,7 +95,38 @@ const SCHEMA = `
     module_ids text[] NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
   );
+  -- Hourly summaries of measurements, kept up to date on every insert. Charts over weeks or
+  -- more, records and monthly averages read these instead of millions of raw rows.
+  CREATE TABLE IF NOT EXISTS hourly (
+    module_id text NOT NULL REFERENCES modules (id),
+    hour timestamptz NOT NULL,
+    ${
+  METRICS.map((m) =>
+    `${m}_avg double precision, ${m}_min double precision, ${m}_max double precision, ${m}_n int NOT NULL DEFAULT 0`
+  ).join(",\n    ")
+},
+    PRIMARY KEY (module_id, hour)
+  );
 `;
+
+/** Recomputes the hourly summaries for a module in [$2, $3) (unix seconds, hour aligned). */
+const REFRESH_HOURLY = `
+  INSERT INTO hourly (module_id, hour, ${
+  METRICS.map((m) => `${m}_avg, ${m}_min, ${m}_max, ${m}_n`).join(", ")
+})
+  SELECT module_id, date_trunc('hour', ts, 'UTC') AS h, ${
+  METRICS.map((m) => `avg(${m}), min(${m}), max(${m}), count(${m})`).join(", ")
+}
+  FROM measurements
+  WHERE module_id = $1 AND ts >= to_timestamp($2::float8) AND ts < to_timestamp($3::float8)
+  GROUP BY module_id, h
+  ON CONFLICT (module_id, hour) DO UPDATE SET ${
+  METRICS.map((m) =>
+    `${m}_avg = excluded.${m}_avg, ${m}_min = excluded.${m}_min, ${m}_max = excluded.${m}_max, ${m}_n = excluded.${m}_n`
+  ).join(", ")
+}`;
+
+const HOUR = 3600;
 
 /** Unix seconds out of a timestamptz column, as a plain JS number. */
 const epoch = (col: string) => `extract(epoch from ${col})::float8`;
@@ -106,8 +137,22 @@ const INSERT_CHUNK = 1000;
 export class Archive {
   constructor(private db: Db) {}
 
-  init(): Promise<void> {
-    return this.db.exec(SCHEMA);
+  async init(): Promise<void> {
+    await this.db.exec(SCHEMA);
+    // Archives from before the hourly table existed: build it once from the raw data.
+    const [{ missing }] = await this.db.query<{ missing: boolean }>(
+      "SELECT NOT EXISTS (SELECT 1 FROM hourly) AND EXISTS (SELECT 1 FROM measurements) AS missing",
+    );
+    if (!missing) return;
+    const modules = await this.db.query<{ id: string; name: string }>(
+      "SELECT id, name FROM modules ORDER BY name",
+    );
+    for (const m of modules) {
+      const started = Date.now();
+      console.log(`Building hourly summaries for ${m.name} (one-time, after an upgrade)...`);
+      await this.db.query(REFRESH_HOURLY, [m.id, 0, Date.now() / 1000 + HOUR]);
+      console.log(`  done in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+    }
   }
 
   async upsertModule(m: { id: string; name: string; kind: ModuleKind }) {
@@ -122,6 +167,12 @@ export class Archive {
   async insert(moduleId: string, columns: Column[], rows: Row[]): Promise<number> {
     const width = columns.length + 2;
     let added = 0;
+    let first = Infinity;
+    let last = -Infinity;
+    for (const [ts] of rows) {
+      if (ts < first) first = ts;
+      if (ts > last) last = ts;
+    }
     for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
       const chunk = rows.slice(i, i + INSERT_CHUNK);
       const params: unknown[] = [];
@@ -139,6 +190,13 @@ export class Archive {
         params,
       );
       added += inserted.length;
+    }
+    if (added) {
+      await this.db.query(REFRESH_HOURLY, [
+        moduleId,
+        Math.floor(first / HOUR) * HOUR,
+        Math.floor(last / HOUR) * HOUR + HOUR,
+      ]);
     }
     return added;
   }
@@ -184,6 +242,7 @@ export class Archive {
     bucket: number,
     tz: string,
   ): Promise<[number, number, number, number][]> {
+    if (bucket >= HOUR) return this.#hourlySeries(moduleId, metric, from, to, bucket, tz);
     const rows = await this.db.query<{ t: number; avg: number; lo: number; hi: number }>(
       `SELECT ${
         epoch(
@@ -201,8 +260,39 @@ export class Archive {
     return rows.map((r) => [r.t, r.avg, r.lo, r.hi]);
   }
 
+  /** Same as series(), from the hourly summaries. */
+  async #hourlySeries(
+    moduleId: string,
+    metric: Metric,
+    from: number,
+    to: number,
+    bucket: number,
+    tz: string,
+  ): Promise<[number, number, number, number][]> {
+    const rows = await this.db.query<{ t: number; avg: number; lo: number; hi: number }>(
+      `SELECT ${
+        epoch(
+          `date_bin(make_interval(secs => $4::float8), hour AT TIME ZONE $5, timestamp '2000-01-01')
+           AT TIME ZONE $5`,
+        )
+      } AS t,
+         round((sum(${metric}_avg * ${metric}_n) / sum(${metric}_n))::numeric, 2)::float8 AS avg,
+         min(${metric}_min) AS lo, max(${metric}_max) AS hi
+       FROM hourly
+       WHERE module_id = $1 AND hour >= to_timestamp($2::float8) AND hour < to_timestamp($3::float8)
+         AND ${metric}_n > 0
+       GROUP BY 1 ORDER BY 1`,
+      [moduleId, from, to, bucket, tz],
+    );
+    return rows.map((r) => [r.t, r.avg, r.lo, r.hi]);
+  }
+
   /** Lowest and highest value since `from` (all time if omitted), as [value, unix seconds]. */
   async extremes(moduleId: string, metric: Metric, from = 0) {
+    // For long ranges, find the hour with the extreme in the summaries, then the exact reading.
+    if (from % HOUR === 0 && Date.now() / 1000 - from > 2 * 24 * HOUR) {
+      return this.#hourlyExtremes(moduleId, metric, from);
+    }
     const pick = (dir: "ASC" | "DESC") =>
       `(SELECT '${dir}' AS dir, ${metric} AS v, ${epoch("ts")} AS ts FROM measurements
         WHERE module_id = $1 AND ts >= to_timestamp($2::float8) AND ${metric} IS NOT NULL
@@ -218,14 +308,37 @@ export class Archive {
     return { min: get("ASC"), max: get("DESC") };
   }
 
+  async #hourlyExtremes(moduleId: string, metric: Metric, from: number) {
+    const pick = async (dir: "ASC" | "DESC") => {
+      const col = dir === "ASC" ? `${metric}_min` : `${metric}_max`;
+      const [r] = await this.db.query<{ v: number; ts: number }>(
+        `SELECT x.${metric} AS v, ${epoch("x.ts")} AS ts
+         FROM (
+           SELECT hour, ${col} AS v FROM hourly
+           WHERE module_id = $1 AND hour >= to_timestamp($2::float8) AND ${metric}_n > 0
+           ORDER BY ${col} ${dir}, hour DESC LIMIT 1
+         ) h
+         JOIN measurements x ON x.module_id = $1 AND x.ts >= h.hour
+           AND x.ts < h.hour + interval '1 hour' AND x.${metric} = h.v
+         ORDER BY x.ts DESC LIMIT 1`,
+        [moduleId, from],
+      );
+      return r ? [r.v, r.ts] as [number, number] : undefined;
+    };
+    const [min, max] = await Promise.all([pick("ASC"), pick("DESC")]);
+    return { min, max };
+  }
+
   /** Monthly averages in local time: [year, month (1-12), avg, number of samples]. */
   async monthly(moduleId: string, metric: Metric, tz: string) {
     const rows = await this.db.query<{ y: number; m: number; avg: number; n: number }>(
       `SELECT extract(year FROM local)::int AS y, extract(month FROM local)::int AS m,
-         round(avg(v)::numeric, 2)::float8 AS avg, count(*)::int AS n
+         round((sum(v * n) / sum(n))::numeric, 2)::float8 AS avg, sum(n)::int AS n
        FROM (
-         SELECT date_trunc('month', ts AT TIME ZONE $2) AS local, ${metric} AS v FROM measurements
-         WHERE module_id = $1 AND ${metric} IS NOT NULL
+         SELECT date_trunc('month', hour AT TIME ZONE $2) AS local, ${metric}_avg AS v,
+           ${metric}_n AS n
+         FROM hourly
+         WHERE module_id = $1 AND ${metric}_n > 0
        ) x
        GROUP BY local ORDER BY local`,
       [moduleId, tz],
