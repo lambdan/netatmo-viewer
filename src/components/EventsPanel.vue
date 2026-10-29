@@ -304,4 +304,29 @@ button:disabled {
   font-size: 17px;
   font-weight: 600;
 }
+
+/* Phones: one field per row */
+@media (max-width: 600px) {
+  .panel {
+    padding: 20px 18px 16px;
+  }
+  .when {
+    -webkit-flex-basis: 92px;
+    flex-basis: 92px;
+    font-size: 13px;
+  }
+  .label {
+    font-size: 15px;
+  }
+  input[type="date"],
+  input[type="text"] {
+    -webkit-flex: 1 0 100%;
+    flex: 1 0 100%;
+    margin-right: 0;
+  }
+  .add button {
+    -webkit-flex: 1 0 100%;
+    flex: 1 0 100%;
+  }
+}
 </style>

@@ -485,4 +485,42 @@ h3 {
     grid-template-rows: minmax(380px, 1fr) auto;
   }
 }
+
+/* Phones */
+@media (max-width: 600px) {
+  .history {
+    padding: 12px 12px 14px;
+  }
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(340px, 1fr) auto;
+    grid-gap: 12px;
+  }
+  .main {
+    padding: 12px 12px 10px 4px;
+  }
+  .chart-head {
+    padding-left: 8px;
+  }
+  .nav {
+    width: 100%;
+  }
+  .nav .label {
+    -webkit-flex: 1;
+    flex: 1;
+    min-width: 0;
+    font-size: 16px;
+  }
+  .summary {
+    padding-left: 44px;
+    font-size: 17px;
+  }
+  .summary span {
+    margin-right: 14px;
+    white-space: nowrap;
+  }
+  .side {
+    padding: 14px 16px;
+  }
+}
 </style>

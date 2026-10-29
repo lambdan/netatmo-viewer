@@ -255,4 +255,46 @@ onUnmounted(() => {
     height: 260px;
   }
 }
+
+/* Phones */
+@media (max-width: 600px) {
+  .app {
+    padding: 12px 12px 10px;
+  }
+  .top {
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+    -webkit-align-items: center;
+    align-items: center;
+    padding: 0 2px 10px;
+  }
+  .station {
+    font-size: 17px;
+  }
+  .link {
+    margin-left: 10px;
+  }
+  .clock .date {
+    display: none;
+  }
+  .clock .time {
+    font-size: 26px;
+  }
+  .grid {
+    /* minmax(0, …) lets the cards shrink below their content's natural width. */
+    grid-template-columns: minmax(0, 1fr);
+    grid-gap: 12px;
+  }
+  .grid.single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-card {
+    min-height: 340px;
+  }
+  .side > * {
+    height: auto;
+    min-height: 220px;
+    margin-bottom: 12px;
+  }
+}
 </style>

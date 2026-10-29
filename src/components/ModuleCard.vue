@@ -247,4 +247,43 @@ h2 {
 .hero .chart {
   margin: 24px 0 24px;
 }
+
+/* Phones */
+@media (max-width: 600px) {
+  .card {
+    padding: 14px 16px;
+  }
+  .temp {
+    font-size: 52px;
+  }
+  .hero .temp {
+    font-size: 84px;
+  }
+  .minmax,
+  .hero .minmax {
+    font-size: 15px;
+    padding-bottom: 4px;
+  }
+  .hero .minmax {
+    padding-bottom: 10px;
+  }
+  .stats {
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+  }
+  .stat,
+  .hero .stat {
+    margin: 0 18px 6px 0;
+  }
+  .stat .value,
+  .hero .stat .value {
+    font-size: 20px;
+  }
+  .chart {
+    margin: 10px -16px -14px;
+  }
+  .hero .chart {
+    margin: 16px 0 24px;
+  }
+}
 </style>

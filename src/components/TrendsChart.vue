@@ -237,4 +237,15 @@ svg {
   text-align: center;
   color: var(--muted);
 }
+
+/* Phones: only every other axis label, so they don't overlap. */
+@media (max-width: 600px) {
+  .xlabels span:nth-child(even) {
+    display: none;
+  }
+  .xlabels span,
+  .ylabel {
+    font-size: 11px;
+  }
+}
 </style>

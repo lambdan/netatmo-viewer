@@ -42,9 +42,11 @@ body {
 }
 
 body {
-  /* Respect the status bar when opened from the home screen. */
+  /* Respect the status bar and notch (iPhone landscape) when opened from the home screen. */
   padding-top: constant(safe-area-inset-top);
   padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 #app {
