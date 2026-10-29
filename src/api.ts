@@ -29,6 +29,8 @@ export const api = {
   events: () => get<StationEvent[]>("/api/events", {}),
   addEvent: (at: number, label: string, moduleIds: string[]) =>
     send<StationEvent>("POST", "/api/events", { at, label, moduleIds }),
+  updateEvent: (id: number, at: number, label: string, moduleIds: string[]) =>
+    send<StationEvent>("PUT", `/api/events/${id}`, { at, label, moduleIds }),
   deleteEvent: (id: number) => send<{ ok: true }>("DELETE", `/api/events/${id}`),
   history: (q: { module: string; metric: Metric; from: number; to: number; bucket: number; tz: string }) =>
     get<SeriesResponse>("/api/history", q),

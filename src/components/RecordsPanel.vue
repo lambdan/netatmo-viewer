@@ -6,7 +6,7 @@ import type { MetricInfo } from "../metrics.ts";
 defineProps<{ records?: RecordsResponse; info: MetricInfo }>();
 
 const rows: { key: RecordPeriod; label: string; when: Intl.DateTimeFormatOptions }[] = [
-  { key: "today", label: "Today", when: { hour: "2-digit", minute: "2-digit" } },
+  { key: "today", label: "Last 24 h", when: { hour: "2-digit", minute: "2-digit" } },
   { key: "month", label: "This month", when: { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" } },
   { key: "year", label: "This year", when: { day: "numeric", month: "short" } },
   { key: "all", label: "All time", when: { day: "numeric", month: "short", year: "numeric" } },

@@ -5,6 +5,7 @@ import type {
   RecordsResponse,
   SeriesResponse,
   SetupRequest,
+  StationEvent,
   WeatherData,
 } from "../shared/types.ts";
 import { AuthError, Netatmo, type NetatmoApp, type Tokens } from "./netatmo.ts";
@@ -90,6 +91,13 @@ async function poll() {
           "UTC",
         );
         m.history = points.map(([t, avg]) => [t, Math.round(avg * 10) / 10]);
+        // Min/max over the last 24 hours rather than Netatmo's "since midnight", which right
+        // after midnight is just the current reading.
+        const { min, max } = await archive.extremes(m.id, "temperature", now - 24 * 3600);
+        if (min && max) {
+          [m.minTemp, m.minTempAt] = min;
+          [m.maxTemp, m.maxTempAt] = max;
+        }
       } catch (e) {
         console.warn(`24h history for ${m.name} failed:`, (e as Error).message);
       }
@@ -225,29 +233,48 @@ async function archiveApi(pathname: string, q: URLSearchParams): Promise<Respons
 }
 
 /** GET /api/events, POST /api/events {at, label, moduleIds}, DELETE /api/events/:id */
+/** Validates an event body from the page; returns an error message instead if it's bad. */
+async function parseEvent(
+  req: Request,
+): Promise<{ at: number; label: string; moduleIds: string[] } | string> {
+  const body = await req.json().catch(() => ({}));
+  const at = Number(body.at);
+  const label = String(body.label ?? "").trim().slice(0, 100);
+  const moduleIds: string[] = Array.isArray(body.moduleIds)
+    ? body.moduleIds.filter((id: unknown) => typeof id === "string" && id)
+    : [];
+  // Netatmo weather stations exist since 2012; allow a bit of future for planned moves.
+  if (!label || !(at > Date.UTC(2012, 0, 1) / 1000 && at < Date.now() / 1000 + 366 * 86400)) {
+    return "An event needs a label and a date";
+  }
+  if (!moduleIds.length) return "Pick at least one module";
+  return { at, label, moduleIds };
+}
+
+const describeEvent = (e: StationEvent) =>
+  `"${e.label}" for ${e.moduleIds.join(", ")} at ${new Date(e.at * 1000).toISOString()}`;
+
+/** GET/POST /api/events, PUT/DELETE /api/events/:id (body: {at, label, moduleIds}) */
 async function eventsApi(req: Request, pathname: string): Promise<Response> {
   if (pathname === "/api/events" && req.method === "GET") return json(await archive.events());
   if (pathname === "/api/events" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
-    const at = Number(body.at);
-    const label = String(body.label ?? "").trim().slice(0, 100);
-    const moduleIds: string[] = Array.isArray(body.moduleIds)
-      ? body.moduleIds.filter((id: unknown) => typeof id === "string" && id)
-      : [];
-    // Netatmo weather stations exist since 2012; allow a bit of future for planned moves.
-    if (!label || !(at > Date.UTC(2012, 0, 1) / 1000 && at < Date.now() / 1000 + 366 * 86400)) {
-      return json({ error: "An event needs a label and a date" }, 400);
-    }
-    if (!moduleIds.length) return json({ error: "Pick at least one module" }, 400);
-    const event = await archive.addEvent(at, label, moduleIds);
-    console.log(
-      `Added event "${event.label}" for ${moduleIds.join(", ")} at ` +
-        new Date(event.at * 1000).toISOString(),
-    );
+    const e = await parseEvent(req);
+    if (typeof e === "string") return json({ error: e }, 400);
+    const event = await archive.addEvent(e.at, e.label, e.moduleIds);
+    console.log(`Added event ${describeEvent(event)}`);
     return json(event);
   }
   const id = Number(pathname.split("/")[3]);
-  if (req.method === "DELETE" && Number.isInteger(id)) {
+  if (!Number.isInteger(id)) return json({ error: "not found" }, 404);
+  if (req.method === "PUT") {
+    const e = await parseEvent(req);
+    if (typeof e === "string") return json({ error: e }, 400);
+    const event = await archive.updateEvent(id, e.at, e.label, e.moduleIds);
+    if (!event) return json({ error: "No such event" }, 404);
+    console.log(`Updated event ${id}: ${describeEvent(event)}`);
+    return json(event);
+  }
+  if (req.method === "DELETE") {
     await archive.deleteEvent(id);
     console.log(`Deleted event ${id}`);
     return json({ ok: true });

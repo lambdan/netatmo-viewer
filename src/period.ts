@@ -119,10 +119,11 @@ export function periodFor(kind: RangeKind, anchor: Date): Period {
 /** The viewer's IANA time zone, so the server can bucket by local days and months. */
 export const timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-/** Start of today, this month and this year, for the records query. */
+/** Start of the last 24 hours, this month and this year, for the records query. */
 export function recordStarts(now = new Date()) {
   return {
-    today: secs(startOf("day", now)),
+    // Rolling, so the minimum isn't just "midnight" for the first hours of the day.
+    today: secs(now) - 24 * 3600,
     month: secs(startOf("month", now)),
     year: secs(startOf("year", now)),
   };

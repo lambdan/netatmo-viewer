@@ -7,14 +7,34 @@ import { fmtDate } from "../format.ts";
 const props = defineProps<{ events: StationEvent[]; modules: Module[]; currentModule: string }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
 
-/** Which modules the new event affected; starts with the one being viewed. */
+/** Which modules the event affected; a new one starts with the module being viewed. */
 const moduleIds = ref<string[]>([props.currentModule]);
 const date = ref("");
 const label = ref("Moved");
 const error = ref<string>();
 const busy = ref(false);
+/** The event being edited in the form, if any. */
+const editing = ref<StationEvent>();
 
-async function add() {
+const pad = (n: number) => (n < 10 ? "0" : "") + n;
+
+function startEdit(e: StationEvent) {
+  const d = new Date(e.at * 1000);
+  editing.value = e;
+  date.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  label.value = e.label;
+  moduleIds.value = e.moduleIds.slice();
+  error.value = undefined;
+}
+
+function resetForm() {
+  editing.value = undefined;
+  date.value = "";
+  label.value = "Moved";
+  moduleIds.value = [props.currentModule];
+}
+
+async function save() {
   // "YYYY-MM-DD" from the date picker, as local midnight.
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.value);
   if (!m) {
@@ -26,11 +46,15 @@ async function add() {
     error.value = "Tick at least one module";
     return;
   }
-  await run(() => api.addEvent(at, label.value, moduleIds.value));
-  if (!error.value) {
-    date.value = "";
-    label.value = "Moved";
-  }
+  // Keep the time of day of an edited event if only other fields changed.
+  const e = editing.value;
+  const sameDay = e && new Date(e.at * 1000).toDateString() === new Date(at * 1000).toDateString();
+  await run(() =>
+    e
+      ? api.updateEvent(e.id, sameDay ? e.at : at, label.value, moduleIds.value)
+      : api.addEvent(at, label.value, moduleIds.value)
+  );
+  if (!error.value) resetForm();
 }
 
 function moduleNames(ids: string[]) {
@@ -38,7 +62,9 @@ function moduleNames(ids: string[]) {
 }
 
 async function remove(e: StationEvent) {
-  if (confirm(`Delete "${e.label}"?`)) await run(() => api.deleteEvent(e.id));
+  if (!confirm(`Delete "${e.label}"?`)) return;
+  await run(() => api.deleteEvent(e.id));
+  if (!error.value && editing.value?.id === e.id) resetForm();
 }
 
 async function run(fn: () => Promise<unknown>) {
@@ -64,14 +90,22 @@ async function run(fn: () => Promise<unknown>) {
         room, or moving house.
       </p>
 
-      <div v-for="e in events.slice().reverse()" :key="e.id" class="event">
+      <div
+        v-for="e in events.slice().reverse()"
+        :key="e.id"
+        class="event"
+        :class="{ editing: editing?.id === e.id }"
+        @click="startEdit(e)"
+      >
         <span class="when">{{ fmtDate(e.at, { day: "numeric", month: "short", year: "numeric" }) }}</span>
         <span class="label">{{ e.label }}<small>{{ moduleNames(e.moduleIds) }}</small></span>
-        <button class="delete" :disabled="busy" @click="remove(e)" aria-label="Delete">×</button>
+        <button class="delete" :disabled="busy" @click.stop="remove(e)" aria-label="Delete">×</button>
       </div>
       <p v-if="!events.length" class="note">No events yet.</p>
+      <p v-else class="note">Tap an event to edit it.</p>
 
-      <form class="add" @submit.prevent="add">
+      <h3>{{ editing ? "Edit event" : "New event" }}</h3>
+      <form class="add" @submit.prevent="save">
         <div class="modules">
           <label v-for="m in modules" :key="m.id" :class="{ checked: moduleIds.includes(m.id) }">
             <input type="checkbox" :value="m.id" v-model="moduleIds" />{{ m.name }}
@@ -79,8 +113,9 @@ async function run(fn: () => Promise<unknown>) {
         </div>
         <input type="date" v-model="date" />
         <input type="text" v-model="label" maxlength="100" placeholder="What happened" />
-        <button type="submit" :disabled="busy || !label.trim()">Add</button>
+        <button type="submit" :disabled="busy || !label.trim()">{{ editing ? "Save" : "Add" }}</button>
       </form>
+      <button v-if="editing" class="cancel" @click="resetForm">Cancel editing</button>
       <p v-if="error" class="error">{{ error }}</p>
 
       <button class="done" @click="emit('close')">Done</button>
@@ -148,6 +183,28 @@ h2 {
   flex: 1;
   font-size: 17px;
 }
+.event {
+  cursor: pointer;
+}
+.event.editing {
+  margin: 0 -10px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+h3 {
+  margin: 18px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cancel {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
 .label small {
   display: block;
   font-size: 12px;
@@ -172,7 +229,7 @@ button {
   display: flex;
   -webkit-flex-wrap: wrap;
   flex-wrap: wrap;
-  margin-top: 16px;
+  margin-top: 10px;
 }
 .add > * {
   margin-bottom: 8px;

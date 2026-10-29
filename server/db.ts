@@ -267,6 +267,21 @@ export class Archive {
     return e;
   }
 
+  async updateEvent(
+    id: number,
+    at: number,
+    label: string,
+    moduleIds: string[],
+  ): Promise<StationEvent | undefined> {
+    const [e] = await this.db.query<StationEvent>(
+      `UPDATE events SET at = to_timestamp($2::float8), label = $3, module_ids = $4::text[]
+       WHERE id = $1
+       RETURNING id, ${epoch("at")} AS at, label, module_ids AS "moduleIds"`,
+      [id, at, label, moduleIds],
+    );
+    return e;
+  }
+
   async deleteEvent(id: number) {
     await this.db.query("DELETE FROM events WHERE id = $1", [id]);
   }
