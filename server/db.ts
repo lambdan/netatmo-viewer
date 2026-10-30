@@ -346,6 +346,19 @@ export class Archive {
     return rows.map((r) => [r.y, r.m, r.avg, r.n] as [number, number, number, number]);
   }
 
+  /** The newest archived reading of a module, as [unix seconds, values by metric]. */
+  async latest(moduleId: string): Promise<[number, Partial<Record<Metric, number>>] | undefined> {
+    const [r] = await this.db.query<Record<string, number | null>>(
+      `SELECT ${epoch("ts")} AS ts, ${METRICS.join(", ")} FROM measurements
+       WHERE module_id = $1 ORDER BY ts DESC LIMIT 1`,
+      [moduleId],
+    );
+    if (!r) return undefined;
+    const values: Partial<Record<Metric, number>> = {};
+    for (const m of METRICS) if (r[m] !== null) values[m] = r[m]!;
+    return [r.ts!, values];
+  }
+
   async oldest(moduleId: string): Promise<number | undefined> {
     const [r] = await this.db.query<{ ts: number | null }>(
       `SELECT ${epoch("min(ts)")} AS ts FROM measurements WHERE module_id = $1`,

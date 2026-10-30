@@ -3,7 +3,8 @@
 
 import type { Module, ModuleKind, Trend, WeatherData } from "../shared/types.ts";
 
-const API = "https://api.netatmo.com";
+// Overridable so the server can be tested against a fake Netatmo.
+const API = Deno.env.get("NETATMO_API_URL") || "https://api.netatmo.com";
 
 export interface Tokens {
   accessToken: string;

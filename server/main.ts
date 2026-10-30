@@ -21,6 +21,8 @@ const POLL_MS = Math.max(60, Number(env("POLL_SECONDS") ?? 300)) * 1000;
 const STATIC_DIR = env("STATIC_DIR") ?? "./dist";
 const DEMO = env("DEMO") === "1";
 const DATABASE_URL = env("DATABASE_URL");
+// Modules report every 5 minutes and upload every ~10; this long without a reading means offline.
+const STALE_SECONDS = 40 * 60;
 
 if (!DEMO && !DATABASE_URL) {
   console.error("DATABASE_URL is required, e.g. postgres://user:password@host:5432/netatmo");
@@ -73,8 +75,9 @@ async function poll() {
   }
   try {
     const data = await netatmo.stations();
-    console.log(`Polled ${data.stationName}: ${data.modules.map(describe).join(" · ")}`);
     await sync.update(data.modules);
+    await fillFromArchive(data.modules);
+    console.log(`Polled ${data.stationName}: ${data.modules.map(describe).join(" · ")}`);
 
     // The 24h chart comes from the archive, in 30 minute buckets. If the database is having
     // trouble, still show the current readings.
@@ -114,6 +117,47 @@ async function poll() {
   }
 }
 
+/** Modules Netatmo currently sends no current readings for, to log changes only once. */
+const missingCurrent = new Set<string>();
+
+/**
+ * Netatmo's current-status endpoint sometimes reports modules as unreachable without any current
+ * values, while their measurements keep arriving. So "online" is decided from the archive (a
+ * reading in the last STALE_SECONDS), and missing values are filled in from the newest reading.
+ */
+async function fillFromArchive(modules: Module[]) {
+  const now = Math.floor(Date.now() / 1000);
+  for (const m of modules) {
+    const missing = m.measuredAt === undefined;
+    if (missing !== missingCurrent.has(m.id)) {
+      if (missing) {
+        missingCurrent.add(m.id);
+        console.log(
+          `Netatmo sent no current readings for ${m.name} (reachable=${m.reachable}); ` +
+            "using the newest archived reading instead",
+        );
+      } else {
+        missingCurrent.delete(m.id);
+        console.log(`Netatmo is sending current readings for ${m.name} again`);
+      }
+    }
+    try {
+      const latest = await archive.latest(m.id);
+      if (latest && latest[0] > (m.measuredAt ?? 0)) {
+        const [ts, values] = latest;
+        m.measuredAt = ts;
+        Object.assign(m, values);
+        // Netatmo's trends belong to its own (older or missing) reading.
+        m.tempTrend = undefined;
+        m.pressureTrend = undefined;
+      }
+    } catch (e) {
+      console.warn(`latest reading for ${m.name} failed:`, (e as Error).message);
+    }
+    if (m.measuredAt !== undefined) m.reachable = now - m.measuredAt < STALE_SECONDS;
+  }
+}
+
 /** One module's current readings for the log, e.g. "Köket 22.9° 37% 593ppm". */
 function describe(m: Module): string {
   const parts = [m.name];
@@ -123,7 +167,13 @@ function describe(m: Module): string {
   if (m.pressure !== undefined) parts.push(`${m.pressure}mbar`);
   if (m.rain1h !== undefined) parts.push(`${m.rain1h}mm/h`);
   if (m.wind !== undefined) parts.push(`${m.wind}km/h`);
-  if (!m.reachable) parts.push("(offline)");
+  if (!m.reachable) {
+    parts.push(
+      m.measuredAt
+        ? `(offline, last reading ${new Date(m.measuredAt * 1000).toISOString()})`
+        : "(offline, no readings)",
+    );
+  }
   return parts.join(" ");
 }
 

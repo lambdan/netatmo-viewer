@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Module } from "../../shared/types.ts";
-import { co2Level, direction, num, temp, tempColor, time, trendArrow } from "../format.ts";
+import {
+  co2Level,
+  direction,
+  fmtDate,
+  num,
+  temp,
+  tempColor,
+  time,
+  trendArrow,
+} from "../format.ts";
 import Sparkline from "./Sparkline.vue";
 import { isLight } from "../theme.ts";
 
@@ -11,13 +20,22 @@ const m = computed(() => props.module);
 const color = computed(() => tempColor(m.value.temperature, isLight.value));
 const lowBattery = computed(() => m.value.battery !== undefined && m.value.battery < 20);
 const hasTemp = computed(() => m.value.temperature !== undefined);
+/** "no data since 14:20" (or with the date, if it wasn't today). */
+const staleSince = computed(() => {
+  const t = m.value.measuredAt;
+  if (!t) return "no data";
+  const today = new Date().toDateString() === new Date(t * 1000).toDateString();
+  return `no data since ${
+    today ? time(t) : fmtDate(t, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+  }`;
+});
 </script>
 
 <template>
   <section class="card" :class="{ hero, offline: !m.reachable }">
     <header>
       <h2>{{ m.name }}</h2>
-      <span v-if="!m.reachable" class="badge warn">offline</span>
+      <span v-if="!m.reachable" class="badge warn">{{ staleSince }}</span>
       <span v-else-if="lowBattery" class="badge warn">battery {{ m.battery }}%</span>
     </header>
 
@@ -96,8 +114,11 @@ const hasTemp = computed(() => m.value.temperature !== undefined);
   -webkit-transition: background-color 1.5s, box-shadow 1.5s;
   transition: background-color 1.5s, box-shadow 1.5s;
 }
-.card.offline {
-  opacity: 0.55;
+/* Last known values stay readable, just muted, next to the "no data since" badge. */
+.card.offline .main,
+.card.offline .stats,
+.card.offline .chart {
+  opacity: 0.6;
 }
 header {
   display: -webkit-flex;
