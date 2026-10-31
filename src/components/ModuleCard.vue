@@ -12,7 +12,7 @@ import {
   trendArrow,
 } from "../format.ts";
 import Sparkline from "./Sparkline.vue";
-import { isLight } from "../theme.ts";
+import { isLight, themeSettings } from "../theme.ts";
 
 const props = defineProps<{ module: Module; hero?: boolean }>();
 
@@ -94,7 +94,7 @@ const staleSince = computed(() => {
     </div>
 
     <div class="chart" v-if="m.history && m.history.length > 1">
-      <Sparkline :points="m.history" :color="color" :axis="hero" />
+      <Sparkline :points="m.history" :color="color" :axis="hero" :freezing="themeSettings.freezingLine" />
     </div>
   </section>
 </template>

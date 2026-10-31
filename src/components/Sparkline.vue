@@ -7,6 +7,8 @@ const props = defineProps<{
   color: string;
   /** Show hour labels along the bottom. */
   axis?: boolean;
+  /** Mark 0° with a line, when it is in range. */
+  freezing?: boolean;
 }>();
 
 const W = 300;
@@ -49,7 +51,9 @@ const geometry = computed(() => {
   }
 
   const [lt, lv] = pts[pts.length - 1];
-  return { line, area, ticks, dotTop: `${(y(lv) / H) * 100}%`, dotLeft: `${(x(lt) / W) * 100}%` };
+  const freezeY = props.freezing && lo <= 0 && hi >= 0 ? y(0) : undefined;
+
+  return { line, area, ticks, freezeY, dotTop: `${(y(lv) / H) * 100}%`, dotLeft: `${(x(lt) / W) * 100}%` };
 });
 </script>
 
@@ -62,6 +66,15 @@ const geometry = computed(() => {
           <stop offset="1" :stop-color="color" stop-opacity="0" />
         </linearGradient>
       </defs>
+      <line
+        v-if="geometry.freezeY !== undefined"
+        class="freeze-line"
+        x1="0"
+        :x2="W"
+        :y1="geometry.freezeY"
+        :y2="geometry.freezeY"
+        vector-effect="non-scaling-stroke"
+      />
       <path :d="geometry.area" :fill="`url(#${gradientId})`" />
       <path
         :d="geometry.line"
@@ -72,6 +85,12 @@ const geometry = computed(() => {
         vector-effect="non-scaling-stroke"
       />
     </svg>
+    <span
+      v-if="geometry.freezeY !== undefined"
+      class="freeze-label"
+      :class="{ below: geometry.freezeY < H * 0.3 }"
+      :style="{ top: `${(geometry.freezeY / H) * 100}%` }"
+    >0°</span>
     <span class="dot" :style="{ top: geometry.dotTop, left: geometry.dotLeft, background: color }" />
     <div class="ticks" v-if="axis">
       <span v-for="t in geometry.ticks" :key="t.label" :style="{ left: t.left }">{{ t.label }}</span>
@@ -92,6 +111,21 @@ svg {
   width: 100%;
   height: 100%;
   overflow: visible;
+}
+.freeze-line {
+  stroke: var(--freeze);
+  stroke-width: 2;
+  stroke-opacity: 0.7;
+}
+.freeze-label {
+  position: absolute;
+  left: 4px;
+  margin-top: -18px;
+  font-size: 12px;
+  color: var(--freeze);
+}
+.freeze-label.below {
+  margin-top: 3px;
 }
 .dot {
   position: absolute;
