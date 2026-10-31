@@ -8,10 +8,12 @@ export interface ThemeSettings {
   dayStart: string;
   /** "HH:MM" when the dark theme starts in auto mode. */
   nightStart: string;
+  /** Mark 0° on the temperature charts. */
+  freezingLine: boolean;
 }
 
 const STORAGE_KEY = "netatmo-viewer.theme";
-const DEFAULTS: ThemeSettings = { mode: "auto", dayStart: "07:00", nightStart: "21:00" };
+const DEFAULTS: ThemeSettings = { mode: "auto", dayStart: "07:00", nightStart: "21:00", freezingLine: true };
 
 function load(): ThemeSettings {
   try {

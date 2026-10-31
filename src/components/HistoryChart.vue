@@ -16,6 +16,8 @@ const props = defineProps<{
   unit: string;
   tipFormat: Intl.DateTimeFormatOptions;
   events?: StationEvent[];
+  /** Mark 0° with a line, when it is in range. */
+  freezing?: boolean;
 }>();
 
 const W = 1000;
@@ -47,6 +49,12 @@ const scale = computed(() => {
   const grid: number[] = [];
   for (let v = lo; v <= hi + step / 2; v += step) grid.push(v);
   return { lo, hi, grid, yOf: (v: number) => (1 - (v - lo) / (hi - lo)) * 100 };
+});
+
+// Only when 0 falls within the scale; the range is left to follow the data.
+const freezeTop = computed(() => {
+  const y = props.freezing ? scale.value?.yOf(0) : undefined;
+  return y !== undefined && y >= 0 && y <= 100 ? y : undefined;
 });
 
 const paths = computed(() => {
@@ -128,6 +136,7 @@ const tip = computed(() => {
           <span class="ylabel">{{ fixed(v, v % 1 ? 1 : 0) }}</span>
         </div>
       </template>
+      <div v-if="freezeTop !== undefined" class="freeze-line" :style="{ top: pct(freezeTop) }" />
       <div v-for="t in ticks" :key="t.t" class="vline" :style="{ left: pct(xOf(t.t)) }" />
       <template v-for="e in visibleEvents" :key="e.id">
         <div class="event-line" :style="{ left: pct(xOf(e.at)) }" />
@@ -229,6 +238,13 @@ svg {
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
+}
+.freeze-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px solid var(--freeze);
+  opacity: 0.7;
 }
 .event-line {
   position: absolute;

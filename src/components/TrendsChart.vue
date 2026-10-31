@@ -10,6 +10,8 @@ const props = defineProps<{
   decimals: number;
   unit: string;
   light: boolean;
+  /** Mark 0° with a line, when it is in range. */
+  freezing?: boolean;
 }>();
 
 const W = 1000;
@@ -32,6 +34,12 @@ const scale = computed(() => {
   const grid: number[] = [];
   for (let v = lo; v <= hi + step / 2; v += step) grid.push(v);
   return { grid, yOf: (v: number) => (1 - (v - lo) / (hi - lo)) * 100 };
+});
+
+// Only when 0 falls within the scale; the range is left to follow the data.
+const freezeTop = computed(() => {
+  const y = props.freezing ? scale.value?.yOf(0) : undefined;
+  return y !== undefined && y >= 0 && y <= 100 ? y : undefined;
 });
 
 const lines = computed(() => {
@@ -93,6 +101,7 @@ const tip = computed(() => {
           <span class="ylabel">{{ fixed(v, v % 1 ? 1 : 0) }}</span>
         </div>
       </template>
+      <div v-if="freezeTop !== undefined" class="freeze-line" :style="{ top: pct(freezeTop) }" />
       <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none">
         <path
           v-for="l in lines"
@@ -152,6 +161,13 @@ svg {
   left: 0;
   right: 0;
   border-top: 1px solid var(--line);
+}
+.freeze-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px solid var(--freeze);
+  opacity: 0.7;
 }
 .ylabel {
   position: absolute;

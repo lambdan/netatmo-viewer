@@ -8,6 +8,10 @@ const modes: { value: ThemeMode; label: string }[] = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
 ];
+const toggle = [
+  { value: true, label: "On" },
+  { value: false, label: "Off" },
+];
 </script>
 
 <template>
@@ -36,6 +40,20 @@ const modes: { value: ThemeMode; label: string }[] = [
       <div class="row" :class="{ disabled: themeSettings.mode !== 'auto' }">
         <span class="label">Dark from</span>
         <input type="time" v-model="themeSettings.nightStart" :disabled="themeSettings.mode !== 'auto'" />
+      </div>
+
+      <div class="row">
+        <span class="label">Freezing line</span>
+        <div class="segmented">
+          <button
+            v-for="o in toggle"
+            :key="o.label"
+            :class="{ active: themeSettings.freezingLine === o.value }"
+            @click="themeSettings.freezingLine = o.value"
+          >
+            {{ o.label }}
+          </button>
+        </div>
       </div>
 
       <p class="note">Saved on this device.</p>

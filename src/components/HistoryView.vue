@@ -12,7 +12,7 @@ import { api } from "../api.ts";
 import { fixed, fmtDate } from "../format.ts";
 import { METRIC_INFO, metricsFor } from "../metrics.ts";
 import { periodFor, type RangeKind, recordStarts, shift, timeZone } from "../period.ts";
-import { isLight } from "../theme.ts";
+import { isLight, themeSettings } from "../theme.ts";
 import { buildYears, yearColor } from "../trends.ts";
 import EventsPanel from "./EventsPanel.vue";
 import HistoryChart from "./HistoryChart.vue";
@@ -139,6 +139,7 @@ const summary = computed(() => {
 });
 
 const color = computed(() => info.value.color(isLight.value, summary.value?.avg));
+const showFreezing = computed(() => themeSettings.freezingLine && metric.value === "temperature");
 
 const monthNames = Array.from({ length: 12 }, (_, i) =>
   fmtDate(new Date(2000, i, 15).getTime() / 1000, { month: "short" }));
@@ -234,6 +235,7 @@ onUnmounted(() => clearTimeout(idleTimer));
             :unit="info.unit"
             :tip-format="period.tipFormat"
             :events="moduleEvents"
+            :freezing="showFreezing"
           />
           <TrendsChart
             v-else
@@ -242,6 +244,7 @@ onUnmounted(() => clearTimeout(idleTimer));
             :decimals="info.decimals"
             :unit="info.unit"
             :light="isLight"
+            :freezing="showFreezing"
           />
         </div>
       </section>
