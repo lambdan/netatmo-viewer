@@ -58,7 +58,6 @@ const en = {
   language: "Language",
   app: "App",
   reload: "Reload",
-  savedNote: "Saved on this device. New versions load by themselves within a few minutes.",
   done: "Done",
 
   // History
@@ -180,7 +179,6 @@ const sv: Record<MessageKey, string> = {
   language: "Språk",
   app: "Appen",
   reload: "Ladda om",
-  savedNote: "Sparas på den här enheten. Nya versioner laddas in av sig själva inom några minuter.",
   done: "Klar",
 
   now: "‹ Nu",

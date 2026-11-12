@@ -5,7 +5,9 @@ WORKDIR /app
 COPY deno.json deno.lock ./
 RUN deno install
 COPY . .
-RUN deno task build
+# Shown in the app's footer; the workflow passes `git describe` since .git isn't copied in.
+ARG APP_VERSION=dev
+RUN APP_VERSION=$APP_VERSION deno task build
 
 # --- runtime: just the Deno server + built static files ---
 FROM denoland/deno:2.9.5

@@ -3,6 +3,8 @@ import { type ThemeMode, themeSettings } from "../theme.ts";
 import { reloadFresh } from "../update.ts";
 import { t } from "../i18n.ts";
 
+const version = __APP_VERSION__;
+
 defineEmits<{ close: [] }>();
 
 const modes: { value: ThemeMode; label: "auto" | "light" | "dark" }[] = [
@@ -97,13 +99,12 @@ const toggle = [
       </div>
 
       <div class="row">
-        <span class="label">{{ t("app") }}</span>
+        <span class="label">{{ t("app") }} <span class="version">{{ version }}</span></span>
         <div class="segmented">
           <button @click="reloadFresh">{{ t("reload") }}</button>
         </div>
       </div>
 
-      <p class="note">{{ t("savedNote") }}</p>
       <button class="done" @click="$emit('close')">{{ t("done") }}</button>
     </div>
   </div>
@@ -197,10 +198,11 @@ input[type="time"] {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.note {
-  margin: 14px 0 0;
-  font-size: 13px;
+.version {
+  margin-left: 6px;
+  font-size: 14px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .done {
   display: block;
