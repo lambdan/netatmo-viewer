@@ -64,21 +64,34 @@ const current = computed(() => {
 });
 
 let fadeTimer: number | undefined;
+/** Fades to the next fact; ignored while a fade is already under way. */
 function next() {
-  if (facts.value.length < 2) return;
+  if (facts.value.length < 2 || fadeTimer !== undefined) return;
   visible.value = false;
   fadeTimer = setTimeout(() => {
+    fadeTimer = undefined;
     index.value = (index.value + 1) % facts.value.length;
     visible.value = true;
   }, 600);
 }
 
-let fetchTimer: number | undefined;
 let rotateTimer: number | undefined;
+function startRotating() {
+  clearInterval(rotateTimer);
+  rotateTimer = setInterval(next, ROTATE_MS);
+}
+
+/** A tapped fact gets its full time on screen too. */
+function tapped() {
+  next();
+  startRotating();
+}
+
+let fetchTimer: number | undefined;
 onMounted(() => {
   load();
   fetchTimer = setInterval(load, FETCH_MS);
-  rotateTimer = setInterval(next, ROTATE_MS);
+  startRotating();
 });
 onUnmounted(() => {
   clearInterval(fetchTimer);
@@ -88,7 +101,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="current" class="fact" :class="{ hidden: !visible }" @click.stop="next">
+  <div v-if="current" class="fact" :class="{ hidden: !visible }" @click.stop="tapped">
     <span class="icon">{{ current.icon }}</span>{{ current.text }}
   </div>
 </template>
