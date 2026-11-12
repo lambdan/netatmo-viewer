@@ -6,6 +6,7 @@ import ModuleCard from "./components/ModuleCard.vue";
 import HistoryView from "./components/HistoryView.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import SetupView from "./components/SetupView.vue";
+import FactLine from "./components/FactLine.vue";
 import { isLight, lightAt, themeSettings } from "./theme.ts";
 
 const REFRESH_MS = 60 * 1000;
@@ -110,7 +111,9 @@ onUnmounted(() => {
         hero
         class="hero-card"
         @click="openHistory(outdoor.id)"
-      />
+      >
+        <FactLine />
+      </ModuleCard>
       <div class="side">
         <ModuleCard v-for="m in others" :key="m.id" :module="m" @click="openHistory(m.id)" />
       </div>

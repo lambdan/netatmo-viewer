@@ -93,6 +93,8 @@ const staleSince = computed(() => {
       </div>
     </div>
 
+    <slot />
+
     <div class="chart" v-if="m.history && m.history.length > 1">
       <Sparkline :points="m.history" :color="color" :axis="hero" :freezing="themeSettings.freezingLine" />
     </div>

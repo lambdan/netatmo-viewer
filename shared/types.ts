@@ -99,3 +99,14 @@ export interface StationEvent {
   /** The modules it affected (only those, so modules added later aren't included). */
   moduleIds: string[];
 }
+
+/**
+ * /api/facts: fun facts for the home view, most interesting first. The text holds tokens the
+ * page formats: {t:-8.3} temperature, {d:2025-03-14} date, {md:11-12} day of the year,
+ * {m:11} month, {n:985} number.
+ */
+export interface Fact {
+  text: string;
+  icon: string;
+  score: number;
+}

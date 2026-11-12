@@ -1,5 +1,6 @@
 import { serveDir } from "@std/http/file-server";
 import type {
+  Fact,
   Module,
   MonthlyResponse,
   RecordsResponse,
@@ -12,6 +13,7 @@ import { AuthError, Netatmo, type NetatmoApp, type Tokens } from "./netatmo.ts";
 import { demoData, seedDemoArchive } from "./demo.ts";
 import { Archive, connect, isMetric, memoryDb } from "./db.ts";
 import { Sync } from "./sync.ts";
+import { loadFacts } from "./facts.ts";
 
 const env = (k: string) => Deno.env.get(k) || undefined;
 
@@ -282,6 +284,25 @@ async function archiveApi(pathname: string, q: URLSearchParams): Promise<Respons
   return json({ error: "not found" }, 404);
 }
 
+// Facts change slowly; recomputing them at most every 10 minutes per time zone is plenty.
+const FACTS_TTL_MS = 10 * 60 * 1000;
+const factsCache = new Map<string, { at: number; facts: Fact[] }>();
+
+async function factsApi(q: URLSearchParams): Promise<Response> {
+  const tz = q.get("tz") || "UTC";
+  const cached = factsCache.get(tz);
+  if (cached && Date.now() - cached.at < FACTS_TTL_MS) return json(cached.facts);
+  if (!cache?.modules.length) return json([]);
+  const started = performance.now();
+  const facts = await loadFacts(archive, cache.modules, tz);
+  factsCache.set(tz, { at: Date.now(), facts });
+  console.log(
+    `Computed ${facts.length} facts for ${tz} in ${Math.round(performance.now() - started)} ms:` +
+      facts.map((f) => `\n  ${f.icon} [${Math.round(f.score)}] ${f.text}`).join(""),
+  );
+  return json(facts);
+}
+
 /** GET /api/events, POST /api/events {at, label, moduleIds}, DELETE /api/events/:id */
 /** Validates an event body from the page; returns an error message instead if it's bad. */
 async function parseEvent(
@@ -358,6 +379,7 @@ async function handle(req: Request, url: URL): Promise<Response> {
   if (pathname.startsWith("/api/")) {
     try {
       if (pathname.startsWith("/api/events")) return await eventsApi(req, pathname);
+      if (pathname === "/api/facts") return await factsApi(url.searchParams);
       return await archiveApi(pathname, url.searchParams);
     } catch (e) {
       console.warn(`${pathname} failed:`, (e as Error).message);

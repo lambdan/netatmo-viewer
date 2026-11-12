@@ -1,4 +1,5 @@
 import type {
+  Fact,
   Metric,
   MonthlyResponse,
   RecordsResponse,
@@ -26,6 +27,7 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 export const api = {
+  facts: (tz: string) => get<Fact[]>("/api/facts", { tz }),
   events: () => get<StationEvent[]>("/api/events", {}),
   addEvent: (at: number, label: string, moduleIds: string[]) =>
     send<StationEvent>("POST", "/api/events", { at, label, moduleIds }),
