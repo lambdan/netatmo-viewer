@@ -298,7 +298,7 @@ async function factsApi(q: URLSearchParams): Promise<Response> {
   factsCache.set(tz, { at: Date.now(), facts });
   console.log(
     `Computed ${facts.length} facts for ${tz} in ${Math.round(performance.now() - started)} ms:` +
-      facts.map((f) => `\n  ${f.icon} [${Math.round(f.score)}] ${f.text}`).join(""),
+      facts.map((f) => `\n  ${f.icon} [${Math.round(f.score)}] ${f.id} ${JSON.stringify(f.vars)}`).join(""),
   );
   return json(facts);
 }

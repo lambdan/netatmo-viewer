@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import type { SetupRequest, SetupStatus } from "../../shared/types.ts";
+import { t } from "../i18n.ts";
 
 defineProps<{ status: SetupStatus; error?: string }>();
 const emit = defineEmits<{ done: [] }>();
@@ -33,42 +34,31 @@ async function submit() {
   <div class="setup">
     <div class="panel">
       <template v-if="status.fromEnv">
-        <h1>Netatmo rejected the login</h1>
-        <p>
-          The credentials in the server's environment variables no longer work. Update
-          <code>NETATMO_CLIENT_ID</code>, <code>NETATMO_CLIENT_SECRET</code> and
-          <code>NETATMO_REFRESH_TOKEN</code> and restart the container.
-        </p>
+        <h1>{{ t("rejected") }}</h1>
+        <!-- The texts are our own (i18n.ts), with a little markup. -->
+        <p v-html="t('envRejected')" />
         <p v-if="error" class="error">{{ error }}</p>
       </template>
 
       <template v-else>
-        <h1 v-if="status.state === 'required'">Connect your weather station</h1>
-        <h1 v-else>Netatmo rejected the login</h1>
-        <p v-if="status.state === 'rejected'">
-          The saved login no longer works (the token may have been revoked). Enter it again below.
-        </p>
+        <h1 v-if="status.state === 'required'">{{ t("connect") }}</h1>
+        <h1 v-else>{{ t("rejected") }}</h1>
+        <p v-if="status.state === 'rejected'">{{ t("savedRejected") }}</p>
 
         <ol>
-          <li>
-            Log in at <a href="https://dev.netatmo.com/apps" target="_blank">dev.netatmo.com/apps</a>
-            with your Netatmo account and <b>create an app</b> (any name and description).
-          </li>
-          <li>Copy the app's <b>client ID</b> and <b>client secret</b>.</li>
-          <li>
-            Under <b>Token generator</b>, choose the scope <code>read_station</code>, click
-            <b>Generate Token</b> and copy the <b>refresh token</b>.
-          </li>
+          <li v-html="t('step1')" />
+          <li v-html="t('step2')" />
+          <li v-html="t('step3')" />
         </ol>
-        <p class="hint">Tip: this is easier from a computer. Open this same address there.</p>
+        <p class="hint">{{ t("computerTip") }}</p>
 
         <form @submit.prevent="submit">
           <label>
-            <span>Client ID</span>
+            <span>{{ t("clientId") }}</span>
             <input v-model="form.clientId" autocomplete="off" autocapitalize="off" spellcheck="false" />
           </label>
           <label>
-            <span>Client secret</span>
+            <span>{{ t("clientSecret") }}</span>
             <input
               v-model="form.clientSecret"
               type="password"
@@ -78,7 +68,7 @@ async function submit() {
             />
           </label>
           <label>
-            <span>Refresh token</span>
+            <span>{{ t("refreshToken") }}</span>
             <input
               v-model="form.refreshToken"
               type="password"
@@ -88,12 +78,9 @@ async function submit() {
             />
           </label>
           <p v-if="message" class="error">{{ message }}</p>
-          <button type="submit" :disabled="busy">{{ busy ? "Checking with Netatmo…" : "Connect" }}</button>
+          <button type="submit" :disabled="busy">{{ busy ? t("checking") : t("connectButton") }}</button>
         </form>
-        <p class="hint">
-          The credentials are stored in the server's database and are only used to read your
-          station's data. Once connected, this form closes.
-        </p>
+        <p class="hint">{{ t("storedNote") }}</p>
       </template>
     </div>
   </div>

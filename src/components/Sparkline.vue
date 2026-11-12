@@ -7,8 +7,8 @@ const props = defineProps<{
   color: string;
   /** Show hour labels along the bottom. */
   axis?: boolean;
-  /** Mark 0° with a line, when it is in range. */
-  freezing?: boolean;
+  /** Where to mark freezing with a line (0 or 32), if wanted and in range. */
+  freezing?: number;
 }>();
 
 const W = 300;
@@ -51,7 +51,8 @@ const geometry = computed(() => {
   }
 
   const [lt, lv] = pts[pts.length - 1];
-  const freezeY = props.freezing && lo <= 0 && hi >= 0 ? y(0) : undefined;
+  const f = props.freezing;
+  const freezeY = f !== undefined && lo <= f && hi >= f ? y(f) : undefined;
 
   return { line, area, ticks, freezeY, dotTop: `${(y(lv) / H) * 100}%`, dotLeft: `${(x(lt) / W) * 100}%` };
 });
@@ -90,7 +91,7 @@ const geometry = computed(() => {
       class="freeze-label"
       :class="{ below: geometry.freezeY < H * 0.3 }"
       :style="{ top: `${(geometry.freezeY / H) * 100}%` }"
-    >0°</span>
+    >{{ freezing }}°</span>
     <span class="dot" :style="{ top: geometry.dotTop, left: geometry.dotLeft, background: color }" />
     <div class="ticks" v-if="axis">
       <span v-for="t in geometry.ticks" :key="t.label" :style="{ left: t.left }">{{ t.label }}</span>

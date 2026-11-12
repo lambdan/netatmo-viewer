@@ -101,12 +101,17 @@ export interface StationEvent {
 }
 
 /**
- * /api/facts: fun facts for the home view, most interesting first. The text holds tokens the
- * page formats: {t:-8.3} temperature, {d:2025-03-14} date, {md:11-12} day of the year,
- * {m:11} month, {n:985} number.
+ * Values of a fact, by name, which decides how the page shows them: t, t2 temperature and
+ * dt temperature difference (°C), d date (YYYY-MM-DD), md day of the year (MM-DD), m month (1-12),
+ * n, n2 number, o ordinal, rec 1 when "on record" rather than "since d"; anything else as is.
  */
+export type FactVars = Record<string, string | number>;
+
+/** /api/facts: fun facts for the home view, most interesting first. */
 export interface Fact {
-  text: string;
+  /** Which text to show, e.g. "lowSince"; the page has the wording in each language. */
+  id: string;
+  vars: FactVars;
   icon: string;
   score: number;
 }

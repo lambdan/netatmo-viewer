@@ -3,6 +3,7 @@ import { ref } from "vue";
 import type { Module, StationEvent } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { fmtDate } from "../format.ts";
+import { t } from "../i18n.ts";
 
 const props = defineProps<{ events: StationEvent[]; modules: Module[]; currentModule: string }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
@@ -10,7 +11,7 @@ const emit = defineEmits<{ close: []; changed: [] }>();
 /** Which modules the event affected; a new one starts with the module being viewed. */
 const moduleIds = ref<string[]>([props.currentModule]);
 const date = ref("");
-const label = ref("Moved");
+const label = ref(t("defaultEventLabel"));
 const error = ref<string>();
 const busy = ref(false);
 /** The event being edited in the form, if any. */
@@ -30,7 +31,7 @@ function startEdit(e: StationEvent) {
 function resetForm() {
   editing.value = undefined;
   date.value = "";
-  label.value = "Moved";
+  label.value = t("defaultEventLabel");
   moduleIds.value = [props.currentModule];
 }
 
@@ -38,12 +39,12 @@ async function save() {
   // "YYYY-MM-DD" from the date picker, as local midnight.
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.value);
   if (!m) {
-    error.value = "Pick a date first";
+    error.value = t("pickDate");
     return;
   }
   const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() / 1000;
   if (!moduleIds.value.length) {
-    error.value = "Tick at least one module";
+    error.value = t("tickModule");
     return;
   }
   // Keep the time of day of an edited event if only other fields changed.
@@ -58,11 +59,11 @@ async function save() {
 }
 
 function moduleNames(ids: string[]) {
-  return ids.map((id) => props.modules.find((m) => m.id === id)?.name ?? "Unknown module").join(", ");
+  return ids.map((id) => props.modules.find((m) => m.id === id)?.name ?? t("unknownModule")).join(", ");
 }
 
 async function remove(e: StationEvent) {
-  if (!confirm(`Delete "${e.label}"?`)) return;
+  if (!confirm(t("confirmDelete", { label: e.label }))) return;
   await run(() => api.deleteEvent(e.id));
   if (!error.value && editing.value?.id === e.id) resetForm();
 }
@@ -84,11 +85,8 @@ async function run(fn: () => Promise<unknown>) {
 <template>
   <div class="overlay" @click.self="emit('close')">
     <div class="panel">
-      <h2>Events</h2>
-      <p class="note">
-        Marked on the history charts of the modules they affected, e.g. moving a module to another
-        room, or moving house.
-      </p>
+      <h2>{{ t("events") }}</h2>
+      <p class="note">{{ t("eventsNote") }}</p>
 
       <div
         v-for="e in events.slice().reverse()"
@@ -99,12 +97,12 @@ async function run(fn: () => Promise<unknown>) {
       >
         <span class="when">{{ fmtDate(e.at, { day: "numeric", month: "short", year: "numeric" }) }}</span>
         <span class="label">{{ e.label }}<small>{{ moduleNames(e.moduleIds) }}</small></span>
-        <button class="delete" :disabled="busy" @click.stop="remove(e)" aria-label="Delete">×</button>
+        <button class="delete" :disabled="busy" @click.stop="remove(e)" :aria-label="t('delete')">×</button>
       </div>
-      <p v-if="!events.length" class="note">No events yet.</p>
-      <p v-else class="note">Tap an event to edit it.</p>
+      <p v-if="!events.length" class="note">{{ t("noEvents") }}</p>
+      <p v-else class="note">{{ t("tapToEdit") }}</p>
 
-      <h3>{{ editing ? "Edit event" : "New event" }}</h3>
+      <h3>{{ t(editing ? "editEvent" : "newEvent") }}</h3>
       <form class="add" @submit.prevent="save">
         <div class="modules">
           <label v-for="m in modules" :key="m.id" :class="{ checked: moduleIds.includes(m.id) }">
@@ -112,13 +110,13 @@ async function run(fn: () => Promise<unknown>) {
           </label>
         </div>
         <input type="date" v-model="date" />
-        <input type="text" v-model="label" maxlength="100" placeholder="What happened" />
-        <button type="submit" :disabled="busy || !label.trim()">{{ editing ? "Save" : "Add" }}</button>
+        <input type="text" v-model="label" maxlength="100" :placeholder="t('whatHappened')" />
+        <button type="submit" :disabled="busy || !label.trim()">{{ t(editing ? "save" : "add") }}</button>
       </form>
-      <button v-if="editing" class="cancel" @click="resetForm">Cancel editing</button>
+      <button v-if="editing" class="cancel" @click="resetForm">{{ t("cancelEditing") }}</button>
       <p v-if="error" class="error">{{ error }}</p>
 
-      <button class="done" @click="emit('close')">Done</button>
+      <button class="done" @click="emit('close')">{{ t("done") }}</button>
     </div>
   </div>
 </template>

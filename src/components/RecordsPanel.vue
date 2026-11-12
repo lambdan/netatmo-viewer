@@ -2,14 +2,15 @@
 import type { RecordPeriod, RecordsResponse } from "../../shared/types.ts";
 import { fixed, fmtDate } from "../format.ts";
 import type { MetricInfo } from "../metrics.ts";
+import { type MessageKey, t } from "../i18n.ts";
 
 defineProps<{ records?: RecordsResponse; info: MetricInfo }>();
 
-const rows: { key: RecordPeriod; label: string; when: Intl.DateTimeFormatOptions }[] = [
-  { key: "today", label: "Last 24 h", when: { hour: "2-digit", minute: "2-digit" } },
-  { key: "month", label: "This month", when: { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" } },
-  { key: "year", label: "This year", when: { day: "numeric", month: "short" } },
-  { key: "all", label: "All time", when: { day: "numeric", month: "short", year: "numeric" } },
+const rows: { key: RecordPeriod; label: MessageKey; when: Intl.DateTimeFormatOptions }[] = [
+  { key: "today", label: "last24h", when: { hour: "2-digit", minute: "2-digit" } },
+  { key: "month", label: "thisMonth", when: { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" } },
+  { key: "year", label: "thisYear", when: { day: "numeric", month: "short" } },
+  { key: "all", label: "allTime", when: { day: "numeric", month: "short", year: "numeric" } },
 ];
 </script>
 
@@ -17,11 +18,11 @@ const rows: { key: RecordPeriod; label: string; when: Intl.DateTimeFormatOptions
   <div class="records">
     <div class="head">
       <span />
-      <span>{{ info.lowWord }}</span>
-      <span>{{ info.highWord }}</span>
+      <span>{{ t(info.lowWord) }}</span>
+      <span>{{ t(info.highWord) }}</span>
     </div>
     <div v-for="r in rows" :key="r.key" class="row">
-      <span class="label">{{ r.label }}</span>
+      <span class="label">{{ t(r.label) }}</span>
       <template v-for="side in (['min', 'max'] as const)" :key="side">
         <span class="cell" v-if="records?.periods[r.key][side]">
           <strong>
@@ -34,13 +35,9 @@ const rows: { key: RecordPeriod; label: string; when: Intl.DateTimeFormatOptions
       </template>
     </div>
     <p class="note" v-if="records?.since">
-      <template v-if="!records.complete">
-        Still importing older history, currently back to
-        {{ fmtDate(records.since, { day: "numeric", month: "short", year: "numeric" }) }}.
-      </template>
-      <template v-else>
-        Since {{ fmtDate(records.since, { day: "numeric", month: "short", year: "numeric" }) }}.
-      </template>
+      {{ t(records.complete ? "since" : "importing", {
+        date: fmtDate(records.since, { day: "numeric", month: "short", year: "numeric" }),
+      }) }}
     </p>
   </div>
 </template>

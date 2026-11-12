@@ -4,6 +4,7 @@ import type { Module } from "../../shared/types.ts";
 import {
   co2Level,
   direction,
+  fixed,
   fmtDate,
   num,
   temp,
@@ -13,21 +14,24 @@ import {
 } from "../format.ts";
 import Sparkline from "./Sparkline.vue";
 import { isLight, themeSettings } from "../theme.ts";
+import { freezingPoint, toUnit } from "../units.ts";
+import { t } from "../i18n.ts";
 
 const props = defineProps<{ module: Module; hero?: boolean }>();
 
 const m = computed(() => props.module);
 const color = computed(() => tempColor(m.value.temperature, isLight.value));
+const history = computed(() => m.value.history?.map(([t, v]) => [t, toUnit(v)] as [number, number]));
 const lowBattery = computed(() => m.value.battery !== undefined && m.value.battery < 20);
 const hasTemp = computed(() => m.value.temperature !== undefined);
 /** "no data since 14:20" (or with the date, if it wasn't today). */
 const staleSince = computed(() => {
-  const t = m.value.measuredAt;
-  if (!t) return "no data";
-  const today = new Date().toDateString() === new Date(t * 1000).toDateString();
-  return `no data since ${
-    today ? time(t) : fmtDate(t, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
-  }`;
+  const at = m.value.measuredAt;
+  if (!at) return t("noData");
+  const today = new Date().toDateString() === new Date(at * 1000).toDateString();
+  return t("noDataSince", {
+    when: today ? time(at) : fmtDate(at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+  });
 });
 </script>
 
@@ -36,7 +40,7 @@ const staleSince = computed(() => {
     <header>
       <h2>{{ m.name }}</h2>
       <span v-if="!m.reachable" class="badge warn">{{ staleSince }}</span>
-      <span v-else-if="lowBattery" class="badge warn">battery {{ m.battery }}%</span>
+      <span v-else-if="lowBattery" class="badge warn">{{ t("battery", { n: m.battery! }) }}</span>
     </header>
 
     <template v-if="hasTemp">
@@ -47,11 +51,11 @@ const staleSince = computed(() => {
         </div>
         <div class="minmax" v-if="m.minTemp !== undefined">
           <div>
-            <span class="label">max</span> {{ temp(m.maxTemp) }}°
+            <span class="label">{{ t("max") }}</span> {{ temp(m.maxTemp) }}°
             <span class="at">{{ time(m.maxTempAt) }}</span>
           </div>
           <div>
-            <span class="label">min</span> {{ temp(m.minTemp) }}°
+            <span class="label">{{ t("min") }}</span> {{ temp(m.minTemp) }}°
             <span class="at">{{ time(m.minTempAt) }}</span>
           </div>
         </div>
@@ -60,43 +64,48 @@ const staleSince = computed(() => {
       <div class="stats">
         <div v-if="m.humidity !== undefined" class="stat">
           <span class="value">{{ num(m.humidity) }}<small>%</small></span>
-          <span class="label">humidity</span>
+          <span class="label">{{ t("humidity") }}</span>
         </div>
         <div v-if="m.co2 !== undefined" class="stat">
           <span class="value">
             <i class="level" :class="co2Level(m.co2)" />{{ num(m.co2) }}<small>ppm</small>
           </span>
-          <span class="label">CO₂</span>
+          <span class="label">{{ t("co2") }}</span>
         </div>
         <div v-if="m.pressure !== undefined" class="stat">
           <span class="value">{{ num(m.pressure) }}<small>mbar {{ trendArrow(m.pressureTrend) }}</small></span>
-          <span class="label">pressure</span>
+          <span class="label">{{ t("pressure") }}</span>
         </div>
         <div v-if="m.noise !== undefined" class="stat">
           <span class="value">{{ num(m.noise) }}<small>dB</small></span>
-          <span class="label">noise</span>
+          <span class="label">{{ t("noise") }}</span>
         </div>
       </div>
     </template>
 
     <div v-else-if="m.kind === 'rain'" class="main">
-      <div class="temp rain">{{ temp(m.rain1h) }}<span class="unit"> mm/h</span></div>
+      <div class="temp rain">{{ fixed(m.rain1h, 1) }}<span class="unit"> mm/h</span></div>
       <div class="minmax">
-        <div><span class="label">24 h</span> {{ temp(m.rain24h) }} mm</div>
+        <div><span class="label">24 h</span> {{ fixed(m.rain24h, 1) }} mm</div>
       </div>
     </div>
 
     <div v-else-if="m.kind === 'wind'" class="main">
       <div class="temp wind">{{ num(m.wind) }}<span class="unit"> km/h {{ direction(m.windAngle) }}</span></div>
       <div class="minmax">
-        <div><span class="label">gust</span> {{ num(m.gust) }} km/h {{ direction(m.gustAngle) }}</div>
+        <div><span class="label">{{ t("gust") }}</span> {{ num(m.gust) }} km/h {{ direction(m.gustAngle) }}</div>
       </div>
     </div>
 
     <slot />
 
-    <div class="chart" v-if="m.history && m.history.length > 1">
-      <Sparkline :points="m.history" :color="color" :axis="hero" :freezing="themeSettings.freezingLine" />
+    <div class="chart" v-if="history && history.length > 1">
+      <Sparkline
+        :points="history"
+        :color="color"
+        :axis="hero"
+        :freezing="themeSettings.freezingLine ? freezingPoint() : undefined"
+      />
     </div>
   </section>
 </template>

@@ -8,10 +8,14 @@ import SettingsPanel from "./components/SettingsPanel.vue";
 import SetupView from "./components/SetupView.vue";
 import FactLine from "./components/FactLine.vue";
 import { isLight, lightAt, themeSettings } from "./theme.ts";
+import { newVersionAvailable, reloadFresh } from "./update.ts";
+import { lang, t } from "./i18n.ts";
 
 const REFRESH_MS = 60 * 1000;
 // Old Safari leaks a bit over days of uptime; a reload every few hours keeps it fresh.
 const RELOAD_MS = 6 * 60 * 60 * 1000;
+// How often to look for a newly deployed version.
+const UPDATE_CHECK_MS = 5 * 60 * 1000;
 
 const data = ref<WeatherData>();
 const fetchError = ref<string>();
@@ -24,7 +28,7 @@ async function load() {
     data.value = await res.json();
     fetchError.value = undefined;
   } catch (e) {
-    fetchError.value = `Can't reach server (${(e as Error).message})`;
+    fetchError.value = (e as Error).message;
   }
 }
 
@@ -32,14 +36,14 @@ const outdoor = computed(() => data.value?.modules.find((m) => m.kind === "outdo
 const others = computed(() => data.value?.modules.filter((m) => m !== outdoor.value) ?? []);
 
 const status = computed(() => {
-  if (fetchError.value) return { text: fetchError.value, warn: true };
+  if (fetchError.value) return { text: t("cantReach", { error: fetchError.value }), warn: true };
   const d = data.value;
-  if (!d) return { text: "Loading…", warn: false };
+  if (!d) return { text: t("loading"), warn: false };
   if (d.error) {
-    const last = d.fetchedAt ? `, showing data from ${ago(d.fetchedAt, now.value.getTime())}` : "";
+    const last = d.fetchedAt ? t("showingFrom", { ago: ago(d.fetchedAt, now.value.getTime()) }) : "";
     return { text: `Netatmo: ${d.error}${last}`, warn: true };
   }
-  return { text: `Updated ${ago(d.fetchedAt, now.value.getTime())}`, warn: false };
+  return { text: t("updated", { ago: ago(d.fetchedAt, now.value.getTime()) }), warn: false };
 });
 
 const showSettings = ref(false);
@@ -61,6 +65,10 @@ function closeHistory() {
 
 // Light theme during the day, dark at night, unless forced in the settings panel.
 watchEffect(() => {
+  document.documentElement.lang = lang();
+});
+
+watchEffect(() => {
   isLight.value = lightAt(now.value, themeSettings);
   document.documentElement.classList.toggle("light", isLight.value);
 });
@@ -68,18 +76,32 @@ watchEffect(() => {
 let refreshTimer: number | undefined;
 let clockTimer: number | undefined;
 let reloadTimer: number | undefined;
+let updateTimer: number | undefined;
+
+async function checkForUpdate() {
+  try {
+    if (await newVersionAvailable()) {
+      console.log("A new version is deployed, reloading");
+      reloadFresh();
+    }
+  } catch {
+    // Server unreachable; try again next time.
+  }
+}
 
 onMounted(() => {
   load();
   refreshTimer = setInterval(load, REFRESH_MS);
   clockTimer = setInterval(() => (now.value = new Date()), 10 * 1000);
   reloadTimer = setTimeout(() => location.reload(), RELOAD_MS);
+  updateTimer = setInterval(checkForUpdate, UPDATE_CHECK_MS);
 });
 
 onUnmounted(() => {
   clearInterval(refreshTimer);
   clearInterval(clockTimer);
   clearTimeout(reloadTimer);
+  clearInterval(updateTimer);
 });
 </script>
 
@@ -94,9 +116,9 @@ onUnmounted(() => {
   <div v-else class="app">
     <header class="top">
       <div class="station">
-        <button class="gear" aria-label="Settings" @click="showSettings = true">⚙&#xFE0E;</button>
+        <button class="gear" :aria-label="t('settings')" @click="showSettings = true">⚙&#xFE0E;</button>
         {{ data?.stationName }}
-        <button v-if="data?.modules.length" class="link" @click="openHistory()">History ›</button>
+        <button v-if="data?.modules.length" class="link" @click="openHistory()">{{ t("history") }}</button>
       </div>
       <div class="clock">
         <span class="date">{{ dateLine(now) }}</span>
@@ -121,7 +143,7 @@ onUnmounted(() => {
     <main v-else class="empty">{{ status.text }}</main>
 
     <footer class="bottom" :class="{ warn: status.warn }">
-      {{ status.text }}<template v-if="data?.demo"> · demo data</template>
+      {{ status.text }}<template v-if="data?.demo"> · {{ t("demoData") }}</template>
     </footer>
 
     <SettingsPanel v-if="showSettings" @close="showSettings = false" />
@@ -180,7 +202,6 @@ onUnmounted(() => {
   font-size: 18px;
   color: var(--muted);
   margin-right: 14px;
-  text-transform: capitalize;
 }
 .clock .time {
   font-size: 34px;

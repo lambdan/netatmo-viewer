@@ -10,10 +10,16 @@ export interface ThemeSettings {
   nightStart: string;
   /** Mark 0° on the temperature charts. */
   freezingLine: boolean;
+  /** Celsius or Fahrenheit. */
+  tempUnit: "C" | "F";
+  /** "auto" follows the device. */
+  language: "auto" | "en" | "sv";
 }
 
 const STORAGE_KEY = "netatmo-viewer.theme";
-const DEFAULTS: ThemeSettings = { mode: "auto", dayStart: "07:00", nightStart: "21:00", freezingLine: true };
+const DEFAULTS: ThemeSettings = { mode: "auto", dayStart: "07:00", nightStart: "21:00", freezingLine: true, tempUnit: "C",
+  language: "auto",
+};
 
 function load(): ThemeSettings {
   try {

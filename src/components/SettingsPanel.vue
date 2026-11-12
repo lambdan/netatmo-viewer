@@ -1,26 +1,38 @@
 <script setup lang="ts">
 import { type ThemeMode, themeSettings } from "../theme.ts";
+import { reloadFresh } from "../update.ts";
+import { t } from "../i18n.ts";
 
 defineEmits<{ close: [] }>();
 
-const modes: { value: ThemeMode; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
+const modes: { value: ThemeMode; label: "auto" | "light" | "dark" }[] = [
+  { value: "auto", label: "auto" },
+  { value: "light", label: "light" },
+  { value: "dark", label: "dark" },
+];
+// Language names are shown in their own language.
+const languages = [
+  { value: "auto" as const, label: () => t("auto") },
+  { value: "en" as const, label: () => "English" },
+  { value: "sv" as const, label: () => "Svenska" },
+];
+const units = [
+  { value: "C" as const, label: "°C" },
+  { value: "F" as const, label: "°F" },
 ];
 const toggle = [
-  { value: true, label: "On" },
-  { value: false, label: "Off" },
+  { value: true, label: "on" as const },
+  { value: false, label: "off" as const },
 ];
 </script>
 
 <template>
   <div class="overlay" @click.self="$emit('close')">
     <div class="panel">
-      <h2>Display</h2>
+      <h2>{{ t("display") }}</h2>
 
       <div class="row">
-        <span class="label">Theme</span>
+        <span class="label">{{ t("theme") }}</span>
         <div class="segmented">
           <button
             v-for="m in modes"
@@ -28,22 +40,36 @@ const toggle = [
             :class="{ active: themeSettings.mode === m.value }"
             @click="themeSettings.mode = m.value"
           >
-            {{ m.label }}
+            {{ t(m.label) }}
           </button>
         </div>
       </div>
 
       <div class="row" :class="{ disabled: themeSettings.mode !== 'auto' }">
-        <span class="label">Light from</span>
+        <span class="label">{{ t("lightFrom") }}</span>
         <input type="time" v-model="themeSettings.dayStart" :disabled="themeSettings.mode !== 'auto'" />
       </div>
       <div class="row" :class="{ disabled: themeSettings.mode !== 'auto' }">
-        <span class="label">Dark from</span>
+        <span class="label">{{ t("darkFrom") }}</span>
         <input type="time" v-model="themeSettings.nightStart" :disabled="themeSettings.mode !== 'auto'" />
       </div>
 
       <div class="row">
-        <span class="label">Freezing line</span>
+        <span class="label">{{ t("temperature") }}</span>
+        <div class="segmented">
+          <button
+            v-for="u in units"
+            :key="u.value"
+            :class="{ active: themeSettings.tempUnit === u.value }"
+            @click="themeSettings.tempUnit = u.value"
+          >
+            {{ u.label }}
+          </button>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="label">{{ t("freezingLine") }}</span>
         <div class="segmented">
           <button
             v-for="o in toggle"
@@ -51,13 +77,34 @@ const toggle = [
             :class="{ active: themeSettings.freezingLine === o.value }"
             @click="themeSettings.freezingLine = o.value"
           >
-            {{ o.label }}
+            {{ t(o.label) }}
           </button>
         </div>
       </div>
 
-      <p class="note">Saved on this device.</p>
-      <button class="done" @click="$emit('close')">Done</button>
+      <div class="row">
+        <span class="label">{{ t("language") }}</span>
+        <div class="segmented">
+          <button
+            v-for="l in languages"
+            :key="l.value"
+            :class="{ active: themeSettings.language === l.value }"
+            @click="themeSettings.language = l.value"
+          >
+            {{ l.label() }}
+          </button>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="label">{{ t("app") }}</span>
+        <div class="segmented">
+          <button @click="reloadFresh">{{ t("reload") }}</button>
+        </div>
+      </div>
+
+      <p class="note">{{ t("savedNote") }}</p>
+      <button class="done" @click="$emit('close')">{{ t("done") }}</button>
     </div>
   </div>
 </template>

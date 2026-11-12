@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import type { Fact } from "../../shared/types.ts";
+import type { Fact, FactVars } from "../../shared/types.ts";
 import { api } from "../api.ts";
-import { fmtDate, num, temp } from "../format.ts";
+import { fmtDate, num, temp, tempDelta } from "../format.ts";
+import { factText, ordinal, sincePhrase } from "../i18n.ts";
 
 const FETCH_MS = 10 * 60 * 1000;
 const ROTATE_MS = 20 * 1000;
@@ -21,36 +22,44 @@ async function load() {
   }
 }
 
-/** Local noon of a YYYY-MM-DD day, as unix seconds (noon stays on the right day in any zone). */
+/** Local noon of a day, as unix seconds (noon stays on the right day in any zone). */
 const noon = (y: number, m: number, d: number) => new Date(y, m - 1, d, 12).getTime() / 1000;
 
-function render(text: string): string {
-  return text.replace(/\{(\w+):([^}]*)\}/g, (_, kind: string, v: string) => {
-    if (kind === "t") return `${temp(Number(v))}°`;
-    if (kind === "n") return num(Number(v));
-    if (kind === "m") return fmtDate(noon(2000, Number(v), 1), { month: "long" });
-    if (kind === "md") {
-      const [m, d] = v.split("-").map(Number);
-      return fmtDate(noon(2000, m, d), { day: "numeric", month: "long" });
-    }
-    if (kind === "d") {
-      const [y, m, d] = v.split("-").map(Number);
-      const thisYear = y === new Date().getFullYear();
-      return fmtDate(noon(y, m, d), thisYear ? { day: "numeric", month: "long" } : {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-    }
-    return v;
-  });
+function formatDay(v: string): string {
+  const [y, m, d] = v.split("-").map(Number);
+  const thisYear = y === new Date().getFullYear();
+  return fmtDate(
+    noon(y, m, d),
+    thisYear ? { day: "numeric", month: "long" } : { day: "numeric", month: "long", year: "numeric" },
+  );
+}
+
+/** The values of a fact, formatted for display; see FactVars for what each name means. */
+function formatVars(vars: FactVars): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k in vars) {
+    const v = vars[k];
+    if (k === "t" || k === "t2") out[k] = `${temp(Number(v))}°`;
+    else if (k === "dt") out[k] = `${tempDelta(Number(v))}°`;
+    else if (k === "d") out[k] = formatDay(String(v));
+    else if (k === "md") {
+      const [m, d] = String(v).split("-").map(Number);
+      out[k] = fmtDate(noon(2000, m, d), { day: "numeric", month: "long" });
+    } else if (k === "m") out[k] = fmtDate(noon(2000, Number(v), 1), { month: "long" });
+    else if (k === "n" || k === "n2") out[k] = num(Number(v));
+    else if (k === "o") out[k] = ordinal(Number(v));
+    else out[k] = String(v);
+  }
+  if (out.d !== undefined) out.since = sincePhrase(out.d, vars.rec === 1);
+  return out;
 }
 
 const current = computed(() => {
   const f = facts.value[index.value];
   if (!f) return undefined;
-  const text = render(f.text);
-  // Tokens like {m:11} can start a sentence; month names are lowercase in some languages.
+  const text = factText(f.id, formatVars(f.vars));
+  if (!text) return undefined;
+  // Month names start sentences now and then, and are lowercase in Swedish.
   return { icon: f.icon, text: text.charAt(0).toUpperCase() + text.slice(1) };
 });
 

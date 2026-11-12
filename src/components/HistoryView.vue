@@ -13,6 +13,8 @@ import { fixed, fmtDate } from "../format.ts";
 import { METRIC_INFO, metricsFor } from "../metrics.ts";
 import { periodFor, type RangeKind, recordStarts, shift, timeZone } from "../period.ts";
 import { isLight, themeSettings } from "../theme.ts";
+import { freezingPoint, toCelsius, toUnit } from "../units.ts";
+import { t } from "../i18n.ts";
 import { buildYears, yearColor } from "../trends.ts";
 import EventsPanel from "./EventsPanel.vue";
 import HistoryChart from "./HistoryChart.vue";
@@ -53,14 +55,14 @@ function step(n: number) {
 }
 
 const moduleOptions = computed(() => charted.value.map((m) => ({ value: m.id, label: m.name })));
-const metricOptions = computed(() => metrics.value.map((k) => ({ value: k, label: METRIC_INFO[k].label })));
-const viewOptions: { value: View; label: string }[] = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "year", label: "Year" },
-  { value: "years", label: "Years" },
-];
+const metricOptions = computed(() => metrics.value.map((k) => ({ value: k, label: t(METRIC_INFO[k].label) })));
+const viewOptions = computed((): { value: View; label: string }[] => [
+  { value: "day", label: t("day") },
+  { value: "week", label: t("week") },
+  { value: "month", label: t("month") },
+  { value: "year", label: t("year") },
+  { value: "years", label: t("years") },
+]);
 
 // --- data ---
 
@@ -79,7 +81,7 @@ function loader<T>(fetch: () => Promise<T> | undefined, target: { value: T | und
       target.value = value;
       error.value = undefined;
     } catch (e) {
-      if (id === seq) error.value = `Couldn't load history (${(e as Error).message})`;
+      if (id === seq) error.value = t("loadHistoryFailed", { error: (e as Error).message });
     }
   };
 }
@@ -110,7 +112,7 @@ async function loadEvents() {
   try {
     events.value = await api.events();
   } catch (e) {
-    error.value = `Couldn't load events (${(e as Error).message})`;
+    error.value = t("loadEventsFailed", { error: (e as Error).message });
   }
 }
 loadEvents();
@@ -124,8 +126,27 @@ function eventsIn(year: number) {
 
 // --- derived display data ---
 
+// Temperatures arrive in °C; these are in the unit chosen in the settings.
+const convert = computed(() => (metric.value === "temperature" ? toUnit : (v: number) => v));
+const shownSeries = computed(() =>
+  series.value?.points.map(([t, avg, lo, hi]) =>
+    [t, convert.value(avg), convert.value(lo), convert.value(hi)] as [number, number, number, number]
+  )
+);
+const shownRecords = computed((): RecordsResponse | undefined => {
+  const r = records.value;
+  if (!r) return undefined;
+  const c = convert.value;
+  const pair = (p?: [number, number]) => (p ? [c(p[0]), p[1]] as [number, number] : undefined);
+  const periods = { ...r.periods };
+  for (const k of Object.keys(periods) as (keyof typeof periods)[]) {
+    periods[k] = { min: pair(r.periods[k].min), max: pair(r.periods[k].max) };
+  }
+  return { ...r, periods };
+});
+
 const summary = computed(() => {
-  const pts = series.value?.points;
+  const pts = shownSeries.value;
   if (!pts || !pts.length) return undefined;
   let lo = Infinity;
   let hi = -Infinity;
@@ -138,13 +159,26 @@ const summary = computed(() => {
   return { lo, hi, avg: sum / pts.length };
 });
 
-const color = computed(() => info.value.color(isLight.value, summary.value?.avg));
-const showFreezing = computed(() => themeSettings.freezingLine && metric.value === "temperature");
+// Colours are tuned to °C.
+const color = computed(() => {
+  const avg = summary.value?.avg;
+  const c = avg !== undefined && metric.value === "temperature" ? toCelsius(avg) : avg;
+  return info.value.color(isLight.value, c);
+});
+const freezing = computed(() =>
+  themeSettings.freezingLine && metric.value === "temperature" ? freezingPoint() : undefined
+);
 
-const monthNames = Array.from({ length: 12 }, (_, i) =>
-  fmtDate(new Date(2000, i, 15).getTime() / 1000, { month: "short" }));
+const monthNames = computed(() =>
+  Array.from({ length: 12 }, (_, i) => fmtDate(new Date(2000, i, 15).getTime() / 1000, { month: "short" }))
+);
 const years = computed(() =>
-  monthly.value ? buildYears(monthly.value.months, (m) => monthNames[m]) : []
+  monthly.value
+    ? buildYears(
+      monthly.value.months.map(([y, m, avg, n]) => [y, m, convert.value(avg), n]),
+      (m) => monthNames.value[m],
+    )
+    : []
 );
 
 /** The delta as shown, so "+0.0" isn't coloured as a rise. */
@@ -194,8 +228,8 @@ onUnmounted(() => clearTimeout(idleTimer));
   >
     <header class="top">
       <div>
-        <button class="back" @click="emit('close')">‹ Now</button>
-        <button class="events-button" @click="showEvents = true">Events</button>
+        <button class="back" @click="emit('close')">{{ t("now") }}</button>
+        <button class="events-button" @click="showEvents = true">{{ t("events") }}</button>
       </div>
       <Segmented v-if="moduleOptions.length > 1" :options="moduleOptions" v-model="moduleId" />
       <Segmented v-if="metricOptions.length > 1" :options="metricOptions" v-model="metric" />
@@ -212,20 +246,20 @@ onUnmounted(() => clearTimeout(idleTimer));
             <button @click="step(1)" :disabled="!canGoForward">›</button>
           </div>
           <div class="nav" v-else>
-            <span class="label">Monthly averages, year by year</span>
+            <span class="label">{{ t("monthlyAverages") }}</span>
           </div>
         </div>
         <div class="summary" v-if="period">
           <template v-if="summary">
-            <span><small>Low</small> {{ fixed(summary.lo, info.decimals) }}{{ info.unit }}</span>
-            <span><small>Avg</small> {{ fixed(summary.avg, info.decimals) }}{{ info.unit }}</span>
-            <span><small>High</small> {{ fixed(summary.hi, info.decimals) }}{{ info.unit }}</span>
+            <span><small>{{ t("low") }}</small> {{ fixed(summary.lo, info.decimals) }}{{ info.unit }}</span>
+            <span><small>{{ t("avg") }}</small> {{ fixed(summary.avg, info.decimals) }}{{ info.unit }}</span>
+            <span><small>{{ t("high") }}</small> {{ fixed(summary.hi, info.decimals) }}{{ info.unit }}</span>
           </template>
         </div>
         <div class="chart-area">
           <HistoryChart
             v-if="period"
-            :points="series?.points ?? []"
+            :points="shownSeries ?? []"
             :from="period.from"
             :to="period.to"
             :bucket="period.bucket"
@@ -235,7 +269,7 @@ onUnmounted(() => clearTimeout(idleTimer));
             :unit="info.unit"
             :tip-format="period.tipFormat"
             :events="moduleEvents"
-            :freezing="showFreezing"
+            :freezing="freezing"
           />
           <TrendsChart
             v-else
@@ -244,14 +278,14 @@ onUnmounted(() => clearTimeout(idleTimer));
             :decimals="info.decimals"
             :unit="info.unit"
             :light="isLight"
-            :freezing="showFreezing"
+            :freezing="freezing"
           />
         </div>
       </section>
 
       <aside class="card side">
         <template v-if="view === 'years'">
-          <h3>Yearly average</h3>
+          <h3>{{ t("yearlyAverage") }}</h3>
           <div v-for="(y, i) in years.slice().reverse()" :key="y.year" class="year">
             <i :style="{ background: yearColor(years.length - 1 - i, years.length, isLight) }" />
             <span class="name">
@@ -265,14 +299,11 @@ onUnmounted(() => clearTimeout(idleTimer));
               {{ y.delta === undefined ? "" : signed(y.delta) }}
             </span>
           </div>
-          <p class="note">
-            The change is against the same months of the previous year, so partial years compare
-            fairly.
-          </p>
+          <p class="note">{{ t("yearlyNote") }}</p>
         </template>
         <template v-else>
-          <h3>Records</h3>
-          <RecordsPanel :records="records" :info="info" />
+          <h3>{{ t("records") }}</h3>
+          <RecordsPanel :records="shownRecords" :info="info" />
         </template>
       </aside>
     </main>

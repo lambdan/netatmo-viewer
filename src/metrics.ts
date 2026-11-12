@@ -1,12 +1,14 @@
 import type { Metric, Module } from "../shared/types.ts";
 import { tempColor } from "./format.ts";
+import type { MessageKey } from "./i18n.ts";
 
 export interface MetricInfo {
-  label: string;
+  /** Texts, translated with t() where shown. */
+  label: MessageKey;
   unit: string;
   decimals: number;
-  lowWord: string;
-  highWord: string;
+  lowWord: MessageKey;
+  highWord: MessageKey;
   color(light: boolean, value?: number): string;
 }
 
@@ -15,44 +17,44 @@ const fixedHue = (hue: number) => (light: boolean) =>
 
 export const METRIC_INFO: Record<Metric, MetricInfo> = {
   temperature: {
-    label: "Temp",
+    label: "mTemperature",
     unit: "°",
     decimals: 1,
-    lowWord: "Coldest",
-    highWord: "Warmest",
+    lowWord: "coldest",
+    highWord: "warmest",
     // Tinted by the period's average: blue in winter, orange in summer.
     color: (light, v) => tempColor(v, light),
   },
   humidity: {
-    label: "Humidity",
+    label: "mHumidity",
     unit: "%",
     decimals: 0,
-    lowWord: "Lowest",
-    highWord: "Highest",
+    lowWord: "lowest",
+    highWord: "highest",
     color: fixedHue(205),
   },
   co2: {
-    label: "CO₂",
+    label: "mCo2",
     unit: " ppm",
     decimals: 0,
-    lowWord: "Lowest",
-    highWord: "Highest",
+    lowWord: "lowest",
+    highWord: "highest",
     color: fixedHue(150),
   },
   pressure: {
-    label: "Pressure",
+    label: "mPressure",
     unit: " mbar",
     decimals: 0,
-    lowWord: "Lowest",
-    highWord: "Highest",
+    lowWord: "lowest",
+    highWord: "highest",
     color: fixedHue(265),
   },
   noise: {
-    label: "Noise",
+    label: "mNoise",
     unit: " dB",
     decimals: 0,
-    lowWord: "Quietest",
-    highWord: "Loudest",
+    lowWord: "quietest",
+    highWord: "loudest",
     color: fixedHue(320),
   },
 };

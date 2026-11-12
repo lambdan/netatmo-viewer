@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import type { StationEvent } from "../../shared/types.ts";
 import { fixed, fmtDate } from "../format.ts";
+import { t } from "../i18n.ts";
 import { niceStep, type Tick } from "../period.ts";
 
 const props = defineProps<{
@@ -16,8 +17,8 @@ const props = defineProps<{
   unit: string;
   tipFormat: Intl.DateTimeFormatOptions;
   events?: StationEvent[];
-  /** Mark 0° with a line, when it is in range. */
-  freezing?: boolean;
+  /** Where to mark freezing with a line (0 or 32), if wanted and in range. */
+  freezing?: number;
 }>();
 
 const W = 1000;
@@ -51,9 +52,9 @@ const scale = computed(() => {
   return { lo, hi, grid, yOf: (v: number) => (1 - (v - lo) / (hi - lo)) * 100 };
 });
 
-// Only when 0 falls within the scale; the range is left to follow the data.
+// Only when freezing falls within the scale; the range is left to follow the data.
 const freezeTop = computed(() => {
-  const y = props.freezing ? scale.value?.yOf(0) : undefined;
+  const y = props.freezing !== undefined ? scale.value?.yOf(props.freezing) : undefined;
   return y !== undefined && y >= 0 && y <= 100 ? y : undefined;
 });
 
@@ -169,7 +170,7 @@ const tip = computed(() => {
         </div>
       </template>
 
-      <div v-if="!points.length" class="empty">No data for this period</div>
+      <div v-if="!points.length" class="empty">{{ t("noDataPeriod") }}</div>
     </div>
     <div class="xlabels">
       <span v-for="t in ticks" :key="t.t" :style="{ left: pct(xOf(t.labelAt)) }">{{ t.label }}</span>

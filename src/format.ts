@@ -1,37 +1,56 @@
 import type { Trend } from "../shared/types.ts";
+import { deltaToUnit, toUnit } from "./units.ts";
+import { locale, t } from "./i18n.ts";
 
-const locale = navigator.language || "en";
+// Formatters are slow to create on old Safari, so they're kept per locale and options. Reading
+// locale() here also makes the views update when the language is changed.
+const numberFormats = new Map<string, Intl.NumberFormat>();
+function numberFormat(opts: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const key = locale() + JSON.stringify(opts);
+  let f = numberFormats.get(key);
+  if (!f) numberFormats.set(key, f = new Intl.NumberFormat(locale(), opts));
+  return f;
+}
 
-const oneDecimal = new Intl.NumberFormat(locale, {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
-const integer = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
-const clock = new Intl.DateTimeFormat(locale, {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-const day = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" });
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+function dateFormat(opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = locale() + JSON.stringify(opts);
+  let f = dateFormats.get(key);
+  if (!f) dateFormats.set(key, f = new Intl.DateTimeFormat(locale(), { hour12: false, ...opts }));
+  return f;
+}
 
+const oneDecimal = () => numberFormat({ minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const integer = () => numberFormat({ maximumFractionDigits: 0 });
+const clock = () => dateFormat({ hour: "2-digit", minute: "2-digit" });
+const day = () => dateFormat({ weekday: "long", day: "numeric", month: "long" });
+
+/** A temperature (given in °C) in the chosen unit, without the degree sign. */
 export function temp(v?: number): string {
-  return v === undefined ? "–" : oneDecimal.format(v);
+  return v === undefined ? "–" : oneDecimal().format(toUnit(v));
+}
+
+/** A temperature difference (given in °C) in the chosen unit. */
+export function tempDelta(v: number): string {
+  return oneDecimal().format(deltaToUnit(v));
 }
 
 export function num(v?: number): string {
-  return v === undefined ? "–" : integer.format(v);
+  return v === undefined ? "–" : integer().format(v);
 }
 
 export function time(unixSeconds?: number): string {
-  return unixSeconds === undefined ? "" : clock.format(new Date(unixSeconds * 1000));
+  return unixSeconds === undefined ? "" : clock().format(new Date(unixSeconds * 1000));
 }
 
 export function clockTime(d: Date): string {
-  return clock.format(d);
+  return clock().format(d);
 }
 
+/** "Thursday, November 12" / "Torsdag 12 november": only the first letter is capitalised. */
 export function dateLine(d: Date): string {
-  return day.format(d);
+  const s = day().format(d);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function trendArrow(t?: Trend): string {
@@ -40,10 +59,9 @@ export function trendArrow(t?: Trend): string {
 
 export function ago(ms: number, now: number): string {
   const min = Math.round((now - ms) / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min} min ago`;
-  const h = Math.round(min / 60);
-  return `${h} h ago`;
+  if (min < 1) return t("justNow");
+  if (min < 60) return t("minAgo", { n: min });
+  return t("hAgo", { n: Math.round(min / 60) });
 }
 
 /** Hue for a temperature: blue when cold, green when mild, orange/red when warm. */
@@ -72,28 +90,12 @@ export function direction(deg?: number): string {
   return deg === undefined ? "" : compass[Math.round(deg / 45) % 8];
 }
 
-const numberFormats = new Map<number, Intl.NumberFormat>();
 /** Locale formatted number with a fixed number of decimals. */
 export function fixed(v: number | undefined, decimals: number): string {
   if (v === undefined) return "–";
-  let f = numberFormats.get(decimals);
-  if (!f) {
-    f = new Intl.NumberFormat(locale, {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-    numberFormats.set(decimals, f);
-  }
-  return f.format(v);
+  return numberFormat({ minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(v);
 }
 
-const dateFormats = new Map<string, Intl.DateTimeFormat>();
 export function fmtDate(unixSeconds: number, opts: Intl.DateTimeFormatOptions): string {
-  const key = JSON.stringify(opts);
-  let f = dateFormats.get(key);
-  if (!f) {
-    f = new Intl.DateTimeFormat(locale, { hour12: false, ...opts });
-    dateFormats.set(key, f);
-  }
-  return f.format(new Date(unixSeconds * 1000));
+  return dateFormat(opts).format(new Date(unixSeconds * 1000));
 }

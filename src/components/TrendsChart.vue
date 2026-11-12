@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { fixed } from "../format.ts";
+import { t } from "../i18n.ts";
 import { niceStep } from "../period.ts";
 import { type YearTrend, yearColor } from "../trends.ts";
 
@@ -10,8 +11,8 @@ const props = defineProps<{
   decimals: number;
   unit: string;
   light: boolean;
-  /** Mark 0° with a line, when it is in range. */
-  freezing?: boolean;
+  /** Where to mark freezing with a line (0 or 32), if wanted and in range. */
+  freezing?: number;
 }>();
 
 const W = 1000;
@@ -36,9 +37,9 @@ const scale = computed(() => {
   return { grid, yOf: (v: number) => (1 - (v - lo) / (hi - lo)) * 100 };
 });
 
-// Only when 0 falls within the scale; the range is left to follow the data.
+// Only when freezing falls within the scale; the range is left to follow the data.
 const freezeTop = computed(() => {
-  const y = props.freezing ? scale.value?.yOf(0) : undefined;
+  const y = props.freezing !== undefined ? scale.value?.yOf(props.freezing) : undefined;
   return y !== undefined && y >= 0 && y <= 100 ? y : undefined;
 });
 
@@ -128,7 +129,7 @@ const tip = computed(() => {
           </span>
         </div>
       </template>
-      <div v-if="!years.length" class="empty">No data yet</div>
+      <div v-if="!years.length" class="empty">{{ t("noDataYet") }}</div>
     </div>
     <div class="xlabels">
       <span v-for="(name, m) in monthNames" :key="m" :style="{ left: pct(xOf(m)) }">{{ name }}</span>
