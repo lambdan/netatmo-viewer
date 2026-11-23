@@ -14,6 +14,7 @@ import { demoData, seedDemoArchive } from "./demo.ts";
 import { Archive, connect, isMetric, memoryDb } from "./db.ts";
 import { Sync } from "./sync.ts";
 import { loadFacts } from "./facts.ts";
+import { Shelly } from "./shelly.ts";
 
 const env = (k: string) => Deno.env.get(k) || undefined;
 
@@ -47,6 +48,10 @@ for (let attempt = 1;; attempt++) {
 }
 if (DEMO) await seedDemoArchive(archive);
 
+// Shelly sensors push their readings over a WebSocket; show them as soon as they arrive.
+const shelly = new Shelly(archive, () => void updateShelly());
+await shelly.load();
+
 // Netatmo app credentials come from the env if set there, otherwise from the setup form.
 const APP_SETTING = "netatmo_app";
 const envApp: NetatmoApp | undefined = env("NETATMO_CLIENT_ID") && env("NETATMO_CLIENT_SECRET")
@@ -68,7 +73,9 @@ let inflight: Promise<void> | undefined;
 
 async function poll() {
   if (!netatmo || !sync) {
-    cache = demoData();
+    const data = demoData();
+    data.modules.push(...await shellyModules());
+    cache = data;
     return;
   }
   if (!netatmo.configured) {
@@ -80,34 +87,8 @@ async function poll() {
     await sync.update(data.modules);
     await fillFromArchive(data.modules);
     console.log(`Polled ${data.stationName}: ${data.modules.map(describe).join(" · ")}`);
-
-    // The 24h chart comes from the archive, in 30 minute buckets. If the database is having
-    // trouble, still show the current readings.
-    const now = Math.floor(Date.now() / 1000);
-    for (const m of data.modules) {
-      if (m.temperature === undefined) continue;
-      try {
-        const points = await archive.series(
-          m.id,
-          "temperature",
-          now - 24 * 3600,
-          now + 1,
-          1800,
-          "UTC",
-        );
-        m.history = points.map(([t, avg]) => [t, Math.round(avg * 10) / 10]);
-        // Min/max over the last 24 hours rather than Netatmo's "since midnight", which right
-        // after midnight is just the current reading.
-        const { min, max } = await archive.extremes(m.id, "temperature", now - 24 * 3600);
-        if (min && max) {
-          [m.minTemp, m.minTempAt] = min;
-          [m.maxTemp, m.maxTempAt] = max;
-        }
-      } catch (e) {
-        console.warn(`24h history for ${m.name} failed:`, (e as Error).message);
-      }
-    }
-
+    await addHistory(data.modules);
+    data.modules.push(...await shellyModules());
     cache = data;
   } catch (e) {
     const error = (e as Error).message;
@@ -116,6 +97,57 @@ async function poll() {
       ? { state: "rejected" as const, fromEnv: !!envApp }
       : undefined;
     cache = { ...(cache ?? emptyData()), error, setup };
+  }
+}
+
+/**
+ * The 24h chart comes from the archive, in 30 minute buckets. If the database is having trouble,
+ * still show the current readings.
+ */
+async function addHistory(modules: Module[]) {
+  const now = Math.floor(Date.now() / 1000);
+  for (const m of modules) {
+    if (m.temperature === undefined) continue;
+    try {
+      const points = await archive.series(
+        m.id,
+        "temperature",
+        now - 24 * 3600,
+        now + 1,
+        1800,
+        "UTC",
+      );
+      m.history = points.map(([t, avg]) => [t, Math.round(avg * 10) / 10]);
+      // Min/max over the last 24 hours rather than Netatmo's "since midnight", which right
+      // after midnight is just the current reading.
+      const { min, max } = await archive.extremes(m.id, "temperature", now - 24 * 3600);
+      if (min && max) {
+        [m.minTemp, m.minTempAt] = min;
+        [m.maxTemp, m.maxTempAt] = max;
+      }
+    } catch (e) {
+      console.warn(`24h history for ${m.name} failed:`, (e as Error).message);
+    }
+  }
+}
+
+async function shellyModules(): Promise<Module[]> {
+  const modules = shelly.modules();
+  await addHistory(modules);
+  return modules;
+}
+
+/** Swaps fresh Shelly readings into the cached data, without waiting for the next poll. */
+async function updateShelly() {
+  try {
+    const modules = await shellyModules();
+    if (!cache) return;
+    cache = {
+      ...cache,
+      modules: [...cache.modules.filter((m) => !shelly.has(m.id)), ...modules],
+    };
+  } catch (e) {
+    console.warn("Updating Shelly readings failed:", (e as Error).message);
   }
 }
 
@@ -298,7 +330,8 @@ async function factsApi(q: URLSearchParams): Promise<Response> {
   factsCache.set(tz, { at: Date.now(), facts });
   console.log(
     `Computed ${facts.length} facts for ${tz} in ${Math.round(performance.now() - started)} ms:` +
-      facts.map((f) => `\n  ${f.icon} [${Math.round(f.score)}] ${f.id} ${JSON.stringify(f.vars)}`).join(""),
+      facts.map((f) => `\n  ${f.icon} [${Math.round(f.score)}] ${f.id} ${JSON.stringify(f.vars)}`)
+        .join(""),
   );
   return json(facts);
 }
@@ -376,6 +409,7 @@ async function handle(req: Request, url: URL): Promise<Response> {
     return json(cache);
   }
   if (pathname === "/api/setup" && req.method === "POST") return setup(req);
+  if (pathname === "/api/shelly") return shelly.handle(req);
   if (pathname.startsWith("/api/")) {
     try {
       if (pathname.startsWith("/api/events")) return await eventsApi(req, pathname);

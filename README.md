@@ -60,6 +60,23 @@ needed.
 | `PORT`                   | `8080`   |                                        |
 | `DEMO`                   |          | `1` = fake data                        |
 
+## Extra sensors: Shelly H&T
+
+Shelly H&T Gen3 sensors (and other Gen2+ Shellys with temperature/humidity) can add more rooms.
+They show up as extra indoor cards and are archived like the Netatmo modules.
+
+The sensor sleeps between readings, so it sends its readings to the server rather than the
+server asking for them. In the Shelly app, open the sensor's settings, then:
+
+1. **Outbound WebSocket**: turn it on and set the server to `ws://<server-ip>:8080/api/shelly`.
+2. **Device name**: this is the name shown on the card (until it's set, the card is called
+   "Shelly" plus the last 4 characters of the device ID).
+
+The sensor appears after its next report. Pressing its button wakes it up right away. On
+batteries it reports when the temperature changes by 0.5 °C or the humidity by 5% (the
+thresholds can be lowered in the app), and at least every 2 hours. On USB power it reports every
+5 minutes. History starts when the sensor is connected; there's no CO₂.
+
 ## Archive
 
 Every measurement is also stored in Postgres, so you keep your history even if Netatmo goes down
@@ -84,7 +101,8 @@ Tables (created automatically):
 
 - `measurements`: one row per module and `ts` (`timestamptz`) with `temperature`, `humidity`,
   `co2`, `pressure`, `noise`, plus rain/wind columns. Ready for Grafana or plain SQL.
-- `modules`: names and kinds. `sync_state`: sync/backfill progress. `settings`: the Netatmo tokens.
+- `modules`: names and kinds. `sync_state`: sync/backfill progress. `settings`: the Netatmo tokens
+  and the Shelly sensors' latest status.
 
 Backup:
 
