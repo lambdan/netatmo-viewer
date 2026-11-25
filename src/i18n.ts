@@ -40,6 +40,7 @@ const en = {
   noise: "noise",
   gust: "gust",
   battery: "battery {n}%",
+  batteryLevel: "Battery {n}%",
   noData: "no data",
   noDataSince: "no data since {when}",
 
@@ -163,6 +164,7 @@ const sv: Record<MessageKey, string> = {
   noise: "ljud",
   gust: "byar",
   battery: "batteri {n} %",
+  batteryLevel: "Batteri {n} %",
   noData: "ingen data",
   noDataSince: "ingen data sedan {when}",
 

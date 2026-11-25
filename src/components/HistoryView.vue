@@ -305,6 +305,9 @@ onUnmounted(() => clearTimeout(idleTimer));
           <h3>{{ t("records") }}</h3>
           <RecordsPanel :records="shownRecords" :info="info" />
         </template>
+        <p v-if="module?.battery !== undefined" class="battery" :class="{ low: module.battery < 20 }">
+          {{ t("batteryLevel", { n: module.battery }) }}
+        </p>
       </aside>
     </main>
 
@@ -514,6 +517,16 @@ h3 {
   margin: 12px 0 0;
   font-size: 12px;
   color: var(--muted);
+}
+.battery {
+  margin: 16px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--muted);
+}
+.battery.low {
+  color: var(--warn);
 }
 .error {
   padding-top: 8px;
