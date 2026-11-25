@@ -107,6 +107,7 @@ export class Shelly {
       if (!ok) return;
       let src: string | undefined;
       let asked = false;
+      let sleeping = false;
       for (let text; (text = await ws.receive()) !== null;) {
         let msg: {
           src?: string;
@@ -141,6 +142,7 @@ export class Shelly {
             }
           } else if (msg.method === "NotifyEvent") {
             const events = (msg.params as { events?: { event?: string }[] })?.events ?? [];
+            if (events.some((e) => e.event === "sleep")) sleeping = true;
             console.log(
               `Shelly: ${msg.src} event ${events.map((e) => e.event).join(", ") || "?"}`,
             );
@@ -149,7 +151,7 @@ export class Shelly {
           console.warn(`Shelly: handling a message from ${msg.src} failed:`, (e as Error).message);
         }
       }
-      console.log(`Shelly: ${src ?? from} disconnected`);
+      console.log(`Shelly: ${src ?? from} disconnected${sleeping ? " (went to sleep)" : ""}`);
     } finally {
       ws.close();
     }
@@ -375,7 +377,14 @@ class WsConn {
     try {
       n = await this.conn.read(chunk);
     } catch (e) {
-      if (this.#closed) return false;
+      // A sensor going to sleep drops the connection without closing it; that's normal.
+      if (
+        this.#closed || e instanceof Deno.errors.ConnectionReset ||
+        e instanceof Deno.errors.BrokenPipe
+      ) {
+        this.close();
+        return false;
+      }
       throw e;
     }
     if (n === null) {
