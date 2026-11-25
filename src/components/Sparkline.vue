@@ -28,7 +28,7 @@ const geometry = computed(() => {
     if (v > hi) hi = v;
   }
   // Keep flat-ish indoor curves from looking dramatic.
-  const span = Math.max(hi - lo, 2);
+  const span = Math.max(hi - lo, 1);
   const mid = (hi + lo) / 2;
   lo = mid - span / 2;
   hi = mid + span / 2;

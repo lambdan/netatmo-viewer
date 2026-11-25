@@ -24,6 +24,25 @@ const color = computed(() => tempColor(m.value.temperature, isLight.value));
 const history = computed(() => m.value.history?.map(([t, v]) => [t, toUnit(v)] as [number, number]));
 const lowBattery = computed(() => m.value.battery !== undefined && m.value.battery < 20);
 const hasTemp = computed(() => m.value.temperature !== undefined);
+/** Humidity, CO₂, pressure and noise, whichever the module has. */
+const stats = computed(() => {
+  const v = m.value;
+  const out: { key: string; value: string; unit: string; label: string; level?: string }[] = [];
+  if (v.humidity !== undefined) {
+    out.push({ key: "humidity", value: num(v.humidity), unit: "%", label: t("humidity") });
+  }
+  if (v.co2 !== undefined) {
+    out.push({ key: "co2", value: num(v.co2), unit: "ppm", label: t("co2"), level: co2Level(v.co2) });
+  }
+  if (v.pressure !== undefined) {
+    const unit = `mbar ${trendArrow(v.pressureTrend)}`;
+    out.push({ key: "pressure", value: num(v.pressure), unit, label: t("pressure") });
+  }
+  if (v.noise !== undefined) {
+    out.push({ key: "noise", value: num(v.noise), unit: "dB", label: t("noise") });
+  }
+  return out;
+});
 /** "no data since 14:20" (or with the date, if it wasn't today). */
 const staleSince = computed(() => {
   const at = m.value.measuredAt;
@@ -41,6 +60,12 @@ const staleSince = computed(() => {
       <h2>{{ m.name }}</h2>
       <span v-if="!m.reachable" class="badge warn">{{ staleSince }}</span>
       <span v-else-if="lowBattery" class="badge warn">{{ t("battery", { n: m.battery! }) }}</span>
+      <!-- Small cards: the other readings on the name's line, to leave room for the chart. -->
+      <div class="inline-stats" v-if="!hero && hasTemp && stats.length">
+        <span v-for="st in stats" :key="st.key" :title="st.label">
+          <i v-if="st.level" class="level" :class="st.level" />{{ st.value }}<small>{{ st.unit }}</small>
+        </span>
+      </div>
     </header>
 
     <template v-if="hasTemp">
@@ -61,24 +86,12 @@ const staleSince = computed(() => {
         </div>
       </div>
 
-      <div class="stats">
-        <div v-if="m.humidity !== undefined" class="stat">
-          <span class="value">{{ num(m.humidity) }}<small>%</small></span>
-          <span class="label">{{ t("humidity") }}</span>
-        </div>
-        <div v-if="m.co2 !== undefined" class="stat">
+      <div class="stats" v-if="hero">
+        <div v-for="st in stats" :key="st.key" class="stat">
           <span class="value">
-            <i class="level" :class="co2Level(m.co2)" />{{ num(m.co2) }}<small>ppm</small>
+            <i v-if="st.level" class="level" :class="st.level" />{{ st.value }}<small>{{ st.unit }}</small>
           </span>
-          <span class="label">{{ t("co2") }}</span>
-        </div>
-        <div v-if="m.pressure !== undefined" class="stat">
-          <span class="value">{{ num(m.pressure) }}<small>mbar {{ trendArrow(m.pressureTrend) }}</small></span>
-          <span class="label">{{ t("pressure") }}</span>
-        </div>
-        <div v-if="m.noise !== undefined" class="stat">
-          <span class="value">{{ num(m.noise) }}<small>dB</small></span>
-          <span class="label">{{ t("noise") }}</span>
+          <span class="label">{{ st.label }}</span>
         </div>
       </div>
     </template>
@@ -139,6 +152,7 @@ header {
 }
 h2 {
   margin: 0;
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -147,6 +161,7 @@ h2 {
 }
 .badge {
   margin-left: 10px;
+  white-space: nowrap;
   padding: 2px 8px;
   border-radius: 8px;
   font-size: 12px;
@@ -225,6 +240,31 @@ h2 {
   display: -webkit-flex;
   display: flex;
   margin-top: 14px;
+}
+/* Small cards: on the name's line, without labels (the units say what they are). */
+.inline-stats {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-wrap: wrap;
+  flex-wrap: wrap;
+  -webkit-justify-content: flex-end;
+  justify-content: flex-end;
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.inline-stats span {
+  margin-left: 13px;
+}
+.inline-stats small {
+  font-size: 0.7em;
+  color: var(--muted);
+  margin-left: 2px;
+}
+.inline-stats .level {
+  margin-right: 5px;
 }
 .stat {
   margin-right: 24px;
