@@ -58,6 +58,7 @@ needed.
 | `POSTGRES_PASSWORD`      | `netatmo`| For the bundled `db` service           |
 | `POLL_SECONDS`           | `300`    | How often to ask Netatmo (min 60)      |
 | `PORT`                   | `8080`   |                                        |
+| `SHELLY_PORT`            | `8083`   | Where Shelly sensors connect           |
 | `DEMO`                   |          | `1` = fake data                        |
 
 ## Extra sensors: Shelly H&T
@@ -68,9 +69,14 @@ They show up as extra indoor cards and are archived like the Netatmo modules.
 The sensor sleeps between readings, so it sends its readings to the server rather than the
 server asking for them. In the Shelly app, open the sensor's settings, then:
 
-1. **Outbound WebSocket**: turn it on and set the server to `ws://<server-ip>:8080/api/shelly`.
+1. **Outbound WebSocket** (on the sensor's web page, `http://<sensor-ip>`, under Settings →
+   Connectivity): turn it on and set the server to `ws://<server-ip>:8083/`. The TLS setting
+   doesn't matter for `ws://`. Save; the sensor restarts to apply it.
 2. **Device name**: this is the name shown on the card (until it's set, the card is called
    "Shelly" plus the last 4 characters of the device ID).
+
+Sensors use their own port (`SHELLY_PORT`, 8083), published in `docker-compose.yml`. They can't
+use the main port because Deno's web server rejects the way Shellys open a WebSocket.
 
 The sensor appears after its next report. Pressing its button wakes it up right away. On
 batteries it reports when the temperature changes by 0.5 °C or the humidity by 5% (the

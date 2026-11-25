@@ -22,6 +22,7 @@ USER deno
 RUN deno cache server/main.ts
 
 ENV PORT=8080
-EXPOSE 8080
+# 8083: Shelly sensors
+EXPOSE 8080 8083
 HEALTHCHECK --interval=60s --timeout=5s CMD deno eval "const r = await fetch('http://localhost:8080/healthz'); if (!r.ok) Deno.exit(1)"
 CMD ["deno", "run", "--allow-net", "--allow-env", "--allow-read", "server/main.ts"]

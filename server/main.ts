@@ -19,6 +19,8 @@ import { Shelly } from "./shelly.ts";
 const env = (k: string) => Deno.env.get(k) || undefined;
 
 const PORT = Number(env("PORT") ?? 8080);
+// Shelly sensors connect here (see shelly.ts for why it can't be the same port).
+const SHELLY_PORT = Number(env("SHELLY_PORT") ?? 8083);
 // Netatmo stations upload every ~10 minutes, so polling more often than this is pointless.
 const POLL_MS = Math.max(60, Number(env("POLL_SECONDS") ?? 300)) * 1000;
 const STATIC_DIR = env("STATIC_DIR") ?? "./dist";
@@ -51,6 +53,7 @@ if (DEMO) await seedDemoArchive(archive);
 // Shelly sensors push their readings over a WebSocket; show them as soon as they arrive.
 const shelly = new Shelly(archive, () => void updateShelly());
 await shelly.load();
+shelly.listen(SHELLY_PORT);
 
 // Netatmo app credentials come from the env if set there, otherwise from the setup form.
 const APP_SETTING = "netatmo_app";
@@ -409,7 +412,13 @@ async function handle(req: Request, url: URL): Promise<Response> {
     return json(cache);
   }
   if (pathname === "/api/setup" && req.method === "POST") return setup(req);
-  if (pathname === "/api/shelly") return shelly.handle(req);
+  if (pathname === "/api/shelly") {
+    return new Response(
+      `Shelly sensors connect to their own port: set the sensor's Outbound WebSocket to ` +
+        `ws://<this server>:${SHELLY_PORT}/ (the port as published by Docker, if it maps it)\n`,
+      { status: 404 },
+    );
+  }
   if (pathname.startsWith("/api/")) {
     try {
       if (pathname.startsWith("/api/events")) return await eventsApi(req, pathname);
