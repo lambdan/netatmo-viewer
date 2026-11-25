@@ -38,6 +38,11 @@ const rows: { key: RecordPeriod; label: MessageKey; when: Intl.DateTimeFormatOpt
       {{ t(records.complete ? "since" : "importing", {
         date: fmtDate(records.since, { day: "numeric", month: "short", year: "numeric" }),
       }) }}
+      <template v-if="records.lastReading">
+        {{ t("lastReading", {
+          when: fmtDate(records.lastReading, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+        }) }}
+      </template>
     </p>
   </div>
 </template>

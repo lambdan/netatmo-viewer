@@ -367,6 +367,14 @@ export class Archive {
     return r?.ts ?? undefined;
   }
 
+  async newest(moduleId: string): Promise<number | undefined> {
+    const [r] = await this.db.query<{ ts: number | null }>(
+      `SELECT ${epoch("max(ts)")} AS ts FROM measurements WHERE module_id = $1`,
+      [moduleId],
+    );
+    return r?.ts ?? undefined;
+  }
+
   stats() {
     return this.db.query(
       `SELECT m.id, m.name, m.kind, count(x.ts)::int AS rows,

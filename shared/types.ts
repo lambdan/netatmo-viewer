@@ -81,6 +81,8 @@ export interface RecordsResponse {
   since?: number;
   /** False while the backfill is still importing older history. */
   complete: boolean;
+  /** Unix seconds of the newest measurement; only for sensors that report rarely (Shelly). */
+  lastReading?: number;
   /** min/max as [value, unix seconds] */
   periods: Record<RecordPeriod, { min?: [number, number]; max?: [number, number] }>;
 }

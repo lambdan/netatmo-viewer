@@ -305,9 +305,12 @@ async function archiveApi(pathname: string, q: URLSearchParams): Promise<Respons
       archive.extremes(moduleId, metric, num("year")),
       archive.extremes(moduleId, metric),
     ]);
+    // Shelly sensors have no history to import, only what they've pushed since being added.
+    const isShelly = shelly.has(moduleId);
     const body: RecordsResponse = {
       since,
-      complete: DEMO || state.backfillDone,
+      complete: DEMO || isShelly || state.backfillDone,
+      lastReading: isShelly ? await archive.newest(moduleId) : undefined,
       periods: { today, month, year, all },
     };
     return json(body);
