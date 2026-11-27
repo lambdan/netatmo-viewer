@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type ThemeMode, themeSettings } from "../theme.ts";
+import { settings, type ThemeMode } from "../settings.ts";
 import { reloadFresh } from "../update.ts";
 import { t } from "../i18n.ts";
 
@@ -39,21 +39,21 @@ const toggle = [
           <button
             v-for="m in modes"
             :key="m.value"
-            :class="{ active: themeSettings.mode === m.value }"
-            @click="themeSettings.mode = m.value"
+            :class="{ active: settings.mode === m.value }"
+            @click="settings.mode = m.value"
           >
             {{ t(m.label) }}
           </button>
         </div>
       </div>
 
-      <div class="row" :class="{ disabled: themeSettings.mode !== 'auto' }">
+      <div class="row" :class="{ disabled: settings.mode !== 'auto' }">
         <span class="label">{{ t("lightFrom") }}</span>
-        <input type="time" v-model="themeSettings.dayStart" :disabled="themeSettings.mode !== 'auto'" />
+        <input type="time" v-model="settings.dayStart" :disabled="settings.mode !== 'auto'" />
       </div>
-      <div class="row" :class="{ disabled: themeSettings.mode !== 'auto' }">
+      <div class="row" :class="{ disabled: settings.mode !== 'auto' }">
         <span class="label">{{ t("darkFrom") }}</span>
-        <input type="time" v-model="themeSettings.nightStart" :disabled="themeSettings.mode !== 'auto'" />
+        <input type="time" v-model="settings.nightStart" :disabled="settings.mode !== 'auto'" />
       </div>
 
       <div class="row">
@@ -62,8 +62,8 @@ const toggle = [
           <button
             v-for="u in units"
             :key="u.value"
-            :class="{ active: themeSettings.tempUnit === u.value }"
-            @click="themeSettings.tempUnit = u.value"
+            :class="{ active: settings.tempUnit === u.value }"
+            @click="settings.tempUnit = u.value"
           >
             {{ u.label }}
           </button>
@@ -76,8 +76,8 @@ const toggle = [
           <button
             v-for="o in toggle"
             :key="o.label"
-            :class="{ active: themeSettings.freezingLine === o.value }"
-            @click="themeSettings.freezingLine = o.value"
+            :class="{ active: settings.freezingLine === o.value }"
+            @click="settings.freezingLine = o.value"
           >
             {{ t(o.label) }}
           </button>
@@ -90,8 +90,8 @@ const toggle = [
           <button
             v-for="l in languages"
             :key="l.value"
-            :class="{ active: themeSettings.language === l.value }"
-            @click="themeSettings.language = l.value"
+            :class="{ active: settings.language === l.value }"
+            @click="settings.language = l.value"
           >
             {{ l.label() }}
           </button>

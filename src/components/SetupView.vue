@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import type { SetupRequest, SetupStatus } from "../../shared/types.ts";
+import { api } from "../api.ts";
 import { t } from "../i18n.ts";
 
 defineProps<{ status: SetupStatus; error?: string }>();
@@ -14,13 +15,7 @@ async function submit() {
   busy.value = true;
   message.value = undefined;
   try {
-    const res = await fetch("/api/setup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+    await api.setup(form);
     emit("done");
   } catch (e) {
     message.value = (e as Error).message;

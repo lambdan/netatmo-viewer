@@ -4,17 +4,20 @@ import type {
   MonthlyResponse,
   RecordsResponse,
   SeriesResponse,
+  SetupRequest,
   StationEvent,
+  WeatherData,
 } from "../shared/types.ts";
 
-async function get<T>(path: string, params: Record<string, string | number>): Promise<T> {
+async function get<T>(path: string, params: Record<string, string | number> = {}): Promise<T> {
   const qs = Object.keys(params).map((k) => `${k}=${encodeURIComponent(String(params[k]))}`)
     .join("&");
-  const res = await fetch(`${path}?${qs}`, { cache: "no-store" });
+  const res = await fetch(qs ? `${path}?${qs}` : path, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
+/** Errors carry the server's message when it sends one. */
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method,
@@ -27,8 +30,10 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 export const api = {
+  weather: () => get<WeatherData>("/api/weather"),
+  setup: (req: SetupRequest) => send<{ ok: true }>("POST", "/api/setup", req),
   facts: (tz: string) => get<Fact[]>("/api/facts", { tz }),
-  events: () => get<StationEvent[]>("/api/events", {}),
+  events: () => get<StationEvent[]>("/api/events"),
   addEvent: (at: number, label: string, moduleIds: string[]) =>
     send<StationEvent>("POST", "/api/events", { at, label, moduleIds }),
   updateEvent: (id: number, at: number, label: string, moduleIds: string[]) =>

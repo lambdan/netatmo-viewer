@@ -13,8 +13,8 @@ import {
   trendArrow,
 } from "../format.ts";
 import Sparkline from "./Sparkline.vue";
-import { isLight, themeSettings } from "../theme.ts";
-import { freezingPoint, toUnit } from "../units.ts";
+import { isLight } from "../theme.ts";
+import { freezingLine, toUnit } from "../units.ts";
 import { t } from "../i18n.ts";
 
 const props = defineProps<{ module: Module; hero?: boolean }>();
@@ -117,7 +117,7 @@ const staleSince = computed(() => {
         :points="history"
         :color="color"
         :axis="hero"
-        :freezing="themeSettings.freezingLine ? freezingPoint() : undefined"
+        :freezing="freezingLine()"
       />
     </div>
   </section>

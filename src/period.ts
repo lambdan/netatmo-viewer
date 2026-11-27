@@ -1,6 +1,6 @@
 // Calendar periods for the history view, in the iPad's local time.
 
-import { fmtDate } from "./format.ts";
+import { capitalize, fmtDate } from "./format.ts";
 
 export type RangeKind = "day" | "week" | "month" | "year";
 
@@ -123,9 +123,7 @@ export function periodFor(kind: RangeKind, anchor: Date): Period {
       break;
   }
 
-  // Some locales (e.g. Swedish) don't capitalise weekdays and months.
-  label = label.charAt(0).toUpperCase() + label.slice(1);
-  return { kind, from, to, bucket, label, ticks, tipFormat };
+  return { kind, from, to, bucket, label: capitalize(label), ticks, tipFormat };
 }
 
 /** The viewer's IANA time zone, so the server can bucket by local days and months. */

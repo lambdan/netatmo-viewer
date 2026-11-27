@@ -12,8 +12,8 @@ import { api } from "../api.ts";
 import { fixed, fmtDate } from "../format.ts";
 import { METRIC_INFO, metricsFor } from "../metrics.ts";
 import { periodFor, type RangeKind, recordStarts, shift, timeZone } from "../period.ts";
-import { isLight, themeSettings } from "../theme.ts";
-import { freezingPoint, toCelsius, toUnit } from "../units.ts";
+import { isLight } from "../theme.ts";
+import { freezingLine, toCelsius, toUnit } from "../units.ts";
 import { t } from "../i18n.ts";
 import { buildYears, yearColor } from "../trends.ts";
 import EventsPanel from "./EventsPanel.vue";
@@ -165,9 +165,7 @@ const color = computed(() => {
   const c = avg !== undefined && metric.value === "temperature" ? toCelsius(avg) : avg;
   return info.value.color(isLight.value, c);
 });
-const freezing = computed(() =>
-  themeSettings.freezingLine && metric.value === "temperature" ? freezingPoint() : undefined
-);
+const freezing = computed(() => (metric.value === "temperature" ? freezingLine() : undefined));
 
 const monthNames = computed(() =>
   Array.from({ length: 12 }, (_, i) => fmtDate(new Date(2000, i, 15).getTime() / 1000, { month: "short" }))

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import type { WeatherData } from "../shared/types.ts";
+import { api } from "./api.ts";
 import { ago, clockTime, dateLine } from "./format.ts";
 import ModuleCard from "./components/ModuleCard.vue";
 import HistoryView from "./components/HistoryView.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import SetupView from "./components/SetupView.vue";
 import FactLine from "./components/FactLine.vue";
-import { isLight, lightAt, themeSettings } from "./theme.ts";
+import { applyTheme } from "./theme.ts";
 import { newVersionAvailable, reloadFresh } from "./update.ts";
 import { lang, t } from "./i18n.ts";
 
@@ -23,9 +24,7 @@ const now = ref(new Date());
 
 async function load() {
   try {
-    const res = await fetch("/api/weather", { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    data.value = await res.json();
+    data.value = await api.weather();
     fetchError.value = undefined;
   } catch (e) {
     fetchError.value = (e as Error).message;
@@ -63,15 +62,10 @@ function closeHistory() {
   history.replaceState(null, "", location.pathname);
 }
 
-// Light theme during the day, dark at night, unless forced in the settings panel.
 watchEffect(() => {
   document.documentElement.lang = lang();
 });
-
-watchEffect(() => {
-  isLight.value = lightAt(now.value, themeSettings);
-  document.documentElement.classList.toggle("light", isLight.value);
-});
+watchEffect(() => applyTheme(now.value));
 
 let refreshTimer: number | undefined;
 let clockTimer: number | undefined;

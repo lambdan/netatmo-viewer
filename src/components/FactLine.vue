@@ -2,7 +2,8 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Fact, FactVars } from "../../shared/types.ts";
 import { api } from "../api.ts";
-import { fmtDate, num, temp, tempDelta } from "../format.ts";
+import { timeZone } from "../period.ts";
+import { capitalize, fmtDate, num, temp, tempDelta } from "../format.ts";
 import { factText, ordinal, sincePhrase } from "../i18n.ts";
 
 const FETCH_MS = 10 * 60 * 1000;
@@ -14,8 +15,7 @@ const visible = ref(true);
 
 async function load() {
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    facts.value = await api.facts(tz);
+    facts.value = await api.facts(timeZone);
     if (index.value >= facts.value.length) index.value = 0;
   } catch {
     // Keep showing the old facts; they're just for fun.
@@ -60,7 +60,7 @@ const current = computed(() => {
   const text = factText(f.id, formatVars(f.vars));
   if (!text) return undefined;
   // Month names start sentences now and then, and are lowercase in Swedish.
-  return { icon: f.icon, text: text.charAt(0).toUpperCase() + text.slice(1) };
+  return { icon: f.icon, text: capitalize(text) };
 });
 
 let fadeTimer: number | undefined;

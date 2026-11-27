@@ -1,14 +1,14 @@
 // English and Swedish texts. The language is picked in the settings panel ("auto" follows the
 // device). Dates and numbers follow the device's locale, or Swedish when Swedish is picked.
 
-import { themeSettings } from "./theme.ts";
+import { settings } from "./settings.ts";
 
 export type Lang = "en" | "sv";
 
 const deviceLang = navigator.language || "en";
 
 export function lang(): Lang {
-  const l = themeSettings.language;
+  const l = settings.language;
   if (l === "en" || l === "sv") return l;
   return /^(sv|se)\b/i.test(deviceLang) ? "sv" : "en";
 }

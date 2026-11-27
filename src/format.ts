@@ -47,10 +47,14 @@ export function clockTime(d: Date): string {
   return clock().format(d);
 }
 
+/** Some locales (e.g. Swedish) don't capitalise weekdays and months, even first in a sentence. */
+export function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 /** "Thursday, November 12" / "Torsdag 12 november": only the first letter is capitalised. */
 export function dateLine(d: Date): string {
-  const s = day().format(d);
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return capitalize(day().format(d));
 }
 
 export function trendArrow(t?: Trend): string {
