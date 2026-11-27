@@ -1,6 +1,6 @@
 // Postgres archive of every measurement Netatmo has for the station (plus the API tokens).
 
-import type { ModuleKind, StationEvent } from "../shared/types.ts";
+import { type Metric, METRICS, type ModuleKind, type StationEvent } from "../shared/types.ts";
 
 export const COLUMNS = [
   "temperature",
@@ -16,10 +16,7 @@ export const COLUMNS = [
 ] as const;
 export type Column = typeof COLUMNS[number];
 
-/** Columns that can be charted (they're also interpolated into SQL, so keep this a whitelist). */
-export const METRICS = ["temperature", "humidity", "co2", "pressure", "noise"] as const;
-export type Metric = typeof METRICS[number];
-
+/** Metrics are also interpolated into SQL, so anything from a request must pass this first. */
 export function isMetric(s: string | null): s is Metric {
   return (METRICS as readonly string[]).includes(s ?? "");
 }

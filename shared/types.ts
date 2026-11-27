@@ -66,7 +66,9 @@ export interface SetupRequest {
   refreshToken: string;
 }
 
-export type Metric = "temperature" | "humidity" | "co2" | "pressure" | "noise";
+/** Measurements that can be charted, in the order they're offered. */
+export const METRICS = ["temperature", "humidity", "co2", "pressure", "noise"] as const;
+export type Metric = typeof METRICS[number];
 
 /** /api/history: [bucket start, avg, min, max] */
 export interface SeriesResponse {

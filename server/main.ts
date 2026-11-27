@@ -1,20 +1,21 @@
+// Starts everything up and serves the API and the page.
+
 import { serveDir } from "@std/http/file-server";
 import type {
   Fact,
-  Module,
   MonthlyResponse,
   RecordsResponse,
   SeriesResponse,
-  SetupRequest,
   StationEvent,
-  WeatherData,
 } from "../shared/types.ts";
-import { AuthError, Netatmo, type NetatmoApp, type Tokens } from "./netatmo.ts";
-import { demoData, seedDemoArchive } from "./demo.ts";
+import { Netatmo, type NetatmoApp, type Tokens } from "./netatmo.ts";
+import { seedDemoArchive } from "./demo.ts";
 import { Archive, connect, isMetric, memoryDb } from "./db.ts";
 import { Sync } from "./sync.ts";
 import { loadFacts } from "./facts.ts";
 import { Shelly } from "./shelly.ts";
+import { APP_SETTING, Station } from "./station.ts";
+import { message, sleep } from "./util.ts";
 
 const env = (k: string) => Deno.env.get(k) || undefined;
 
@@ -26,13 +27,13 @@ const POLL_MS = Math.max(60, Number(env("POLL_SECONDS") ?? 300)) * 1000;
 const STATIC_DIR = env("STATIC_DIR") ?? "./dist";
 const DEMO = env("DEMO") === "1";
 const DATABASE_URL = env("DATABASE_URL");
-// Modules report every 5 minutes and upload every ~10; this long without a reading means offline.
-const STALE_SECONDS = 40 * 60;
 
 if (!DEMO && !DATABASE_URL) {
   console.error("DATABASE_URL is required, e.g. postgres://user:password@host:5432/netatmo");
   Deno.exit(1);
 }
+
+// --- startup ---
 
 // Demo mode runs Postgres in-process (PGlite), so it needs no database server.
 const archive = new Archive(DEMO ? await memoryDb() : await connect(DATABASE_URL!));
@@ -44,19 +45,17 @@ for (let attempt = 1;; attempt++) {
     break;
   } catch (e) {
     const wait = Math.min(30, attempt * 2);
-    console.warn(`Database not ready (${(e as Error).message}), retrying in ${wait}s`);
-    await new Promise((r) => setTimeout(r, wait * 1000));
+    console.warn(`Database not ready (${message(e)}), retrying in ${wait}s`);
+    await sleep(wait * 1000);
   }
 }
 if (DEMO) await seedDemoArchive(archive);
 
 // Shelly sensors push their readings over a WebSocket; show them as soon as they arrive.
-const shelly = new Shelly(archive, () => void updateShelly());
+const shelly = new Shelly(archive, () => void station.updateShelly());
 await shelly.load();
-shelly.listen(SHELLY_PORT);
 
 // Netatmo app credentials come from the env if set there, otherwise from the setup form.
-const APP_SETTING = "netatmo_app";
 const envApp: NetatmoApp | undefined = env("NETATMO_CLIENT_ID") && env("NETATMO_CLIENT_SECRET")
   ? { clientId: env("NETATMO_CLIENT_ID")!, clientSecret: env("NETATMO_CLIENT_SECRET")! }
   : undefined;
@@ -69,217 +68,26 @@ const netatmo = DEMO ? undefined : new Netatmo({
     save: (tokens) => archive.setSetting("netatmo_tokens", tokens),
   },
 });
-const sync = netatmo ? new Sync(netatmo, archive) : undefined;
 
-let cache: WeatherData | undefined;
-let inflight: Promise<void> | undefined;
+const station = new Station({
+  archive,
+  shelly,
+  netatmo,
+  sync: netatmo ? new Sync(netatmo, archive) : undefined,
+  appFromEnv: !!envApp,
+});
+station.refresh();
+setInterval(() => station.refresh(), POLL_MS);
+// Only once there's a station to pass their readings to.
+shelly.listen(SHELLY_PORT);
 
-async function poll() {
-  if (!netatmo || !sync) {
-    const data = demoData();
-    data.modules.push(...await shellyModules());
-    cache = data;
-    return;
-  }
-  if (!netatmo.configured) {
-    cache = { ...emptyData(), setup: { state: "required", fromEnv: false } };
-    return;
-  }
-  try {
-    const data = await netatmo.stations();
-    await sync.update(data.modules);
-    await fillFromArchive(data.modules);
-    console.log(`Polled ${data.stationName}: ${data.modules.map(describe).join(" · ")}`);
-    await addHistory(data.modules);
-    data.modules.push(...await shellyModules());
-    cache = data;
-  } catch (e) {
-    const error = (e as Error).message;
-    console.error("Netatmo fetch failed:", error);
-    const setup = e instanceof AuthError
-      ? { state: "rejected" as const, fromEnv: !!envApp }
-      : undefined;
-    cache = { ...(cache ?? emptyData()), error, setup };
-  }
-}
-
-/**
- * The 24h chart comes from the archive, in 30 minute buckets. If the database is having trouble,
- * still show the current readings.
- */
-async function addHistory(modules: Module[]) {
-  const now = Math.floor(Date.now() / 1000);
-  for (const m of modules) {
-    if (m.temperature === undefined) continue;
-    try {
-      const points = await archive.series(
-        m.id,
-        "temperature",
-        now - 24 * 3600,
-        now + 1,
-        1800,
-        "UTC",
-      );
-      m.history = points.map(([t, avg]) => [t, Math.round(avg * 10) / 10]);
-      // Min/max over the last 24 hours rather than Netatmo's "since midnight", which right
-      // after midnight is just the current reading.
-      const { min, max } = await archive.extremes(m.id, "temperature", now - 24 * 3600);
-      if (min && max) {
-        [m.minTemp, m.minTempAt] = min;
-        [m.maxTemp, m.maxTempAt] = max;
-      }
-    } catch (e) {
-      console.warn(`24h history for ${m.name} failed:`, (e as Error).message);
-    }
-  }
-}
-
-async function shellyModules(): Promise<Module[]> {
-  const modules = shelly.modules();
-  await addHistory(modules);
-  return modules;
-}
-
-/** Swaps fresh Shelly readings into the cached data, without waiting for the next poll. */
-async function updateShelly() {
-  try {
-    const modules = await shellyModules();
-    if (!cache) return;
-    cache = {
-      ...cache,
-      modules: [...cache.modules.filter((m) => !shelly.has(m.id)), ...modules],
-    };
-  } catch (e) {
-    console.warn("Updating Shelly readings failed:", (e as Error).message);
-  }
-}
-
-/** Modules Netatmo currently sends no current readings for, to log changes only once. */
-const missingCurrent = new Set<string>();
-
-/**
- * Netatmo's current-status endpoint sometimes reports modules as unreachable without any current
- * values, while their measurements keep arriving. So "online" is decided from the archive (a
- * reading in the last STALE_SECONDS), and missing values are filled in from the newest reading.
- */
-async function fillFromArchive(modules: Module[]) {
-  const now = Math.floor(Date.now() / 1000);
-  for (const m of modules) {
-    const missing = m.measuredAt === undefined;
-    if (missing !== missingCurrent.has(m.id)) {
-      if (missing) {
-        missingCurrent.add(m.id);
-        console.log(
-          `Netatmo sent no current readings for ${m.name} (reachable=${m.reachable}); ` +
-            "using the newest archived reading instead",
-        );
-      } else {
-        missingCurrent.delete(m.id);
-        console.log(`Netatmo is sending current readings for ${m.name} again`);
-      }
-    }
-    try {
-      const latest = await archive.latest(m.id);
-      if (latest && latest[0] > (m.measuredAt ?? 0)) {
-        const [ts, values] = latest;
-        m.measuredAt = ts;
-        Object.assign(m, values);
-        // Netatmo's trends belong to its own (older or missing) reading.
-        m.tempTrend = undefined;
-        m.pressureTrend = undefined;
-      }
-    } catch (e) {
-      console.warn(`latest reading for ${m.name} failed:`, (e as Error).message);
-    }
-    if (m.measuredAt !== undefined) m.reachable = now - m.measuredAt < STALE_SECONDS;
-  }
-}
-
-/** One module's current readings for the log, e.g. "Köket 22.9° 37% 593ppm". */
-function describe(m: Module): string {
-  const parts = [m.name];
-  if (m.temperature !== undefined) parts.push(`${m.temperature}°`);
-  if (m.humidity !== undefined) parts.push(`${m.humidity}%`);
-  if (m.co2 !== undefined) parts.push(`${m.co2}ppm`);
-  if (m.pressure !== undefined) parts.push(`${m.pressure}mbar`);
-  if (m.rain1h !== undefined) parts.push(`${m.rain1h}mm/h`);
-  if (m.wind !== undefined) parts.push(`${m.wind}km/h`);
-  if (!m.reachable) {
-    parts.push(
-      m.measuredAt
-        ? `(offline, last reading ${new Date(m.measuredAt * 1000).toISOString()})`
-        : "(offline, no readings)",
-    );
-  }
-  return parts.join(" ");
-}
-
-function emptyData(): WeatherData {
-  return { stationName: "Weather", fetchedAt: 0, modules: [] };
-}
-
-/** Checks credentials against Netatmo and, if they work, switches to them. */
-async function setup(req: Request): Promise<Response> {
-  if (!netatmo) return json({ error: "Not available in demo mode" }, 404);
-  if (envApp) {
-    return json(
-      { error: "Credentials are set with environment variables; change them there." },
-      403,
-    );
-  }
-  // Once it works, the form is closed so nobody else on the network can swap the account.
-  if (netatmo.configured && cache?.setup?.state !== "rejected") {
-    return json({ error: "Already set up" }, 403);
-  }
-
-  const body = await req.json().catch(() => ({})) as Partial<SetupRequest>;
-  const app = {
-    clientId: body.clientId?.trim() ?? "",
-    clientSecret: body.clientSecret?.trim() ?? "",
-  };
-  const refreshToken = body.refreshToken?.trim() ?? "";
-  if (!app.clientId || !app.clientSecret || !refreshToken) {
-    return json({ error: "All three fields are required" }, 400);
-  }
-
-  const probe = new Netatmo({
-    ...app,
-    initialRefreshToken: refreshToken,
-    tokenStore: { load: () => Promise.resolve(undefined), save: () => Promise.resolve() },
-  });
-  try {
-    await probe.stations();
-  } catch (e) {
-    const msg = (e as Error).message;
-    const error = msg.includes("invalid_client")
-      ? "Netatmo didn't accept the client ID or client secret."
-      : msg.includes("invalid_grant")
-      ? "Netatmo didn't accept the refresh token. Generate a new one and try again."
-      : `Netatmo said: ${msg}`;
-    return json({ error }, 400);
-  }
-
-  await archive.setSetting(APP_SETTING, app);
-  await netatmo.configure(app, probe.tokens!);
-  console.log("Netatmo credentials set up from the web page");
-  // Let any poll still using the old credentials finish, then fetch with the new ones.
-  await inflight;
-  await refresh();
-  return json({ ok: true });
-}
-
-function refresh(): Promise<void> {
-  inflight ??= poll().finally(() => (inflight = undefined));
-  return inflight;
-}
-
-refresh();
-setInterval(refresh, POLL_MS);
+// --- API ---
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+/** GET /api/history, /api/records, /api/monthly and /api/archive */
 async function archiveApi(pathname: string, q: URLSearchParams): Promise<Response> {
   if (pathname === "/api/archive") return json(await archive.stats());
 
@@ -326,13 +134,14 @@ async function archiveApi(pathname: string, q: URLSearchParams): Promise<Respons
 const FACTS_TTL_MS = 10 * 60 * 1000;
 const factsCache = new Map<string, { at: number; facts: Fact[] }>();
 
+/** GET /api/facts?tz= */
 async function factsApi(q: URLSearchParams): Promise<Response> {
   const tz = q.get("tz") || "UTC";
   const cached = factsCache.get(tz);
   if (cached && Date.now() - cached.at < FACTS_TTL_MS) return json(cached.facts);
-  if (!cache?.modules.length) return json([]);
+  if (!station.modules.length) return json([]);
   const started = performance.now();
-  const facts = await loadFacts(archive, cache.modules, tz);
+  const facts = await loadFacts(archive, station.modules, tz);
   factsCache.set(tz, { at: Date.now(), facts });
   console.log(
     `Computed ${facts.length} facts for ${tz} in ${Math.round(performance.now() - started)} ms:` +
@@ -342,7 +151,6 @@ async function factsApi(q: URLSearchParams): Promise<Response> {
   return json(facts);
 }
 
-/** GET /api/events, POST /api/events {at, label, moduleIds}, DELETE /api/events/:id */
 /** Validates an event body from the page; returns an error message instead if it's bad. */
 async function parseEvent(
   req: Request,
@@ -392,6 +200,8 @@ async function eventsApi(req: Request, pathname: string): Promise<Response> {
   return json({ error: "not found" }, 404);
 }
 
+// --- HTTP server ---
+
 console.log(
   `netatmo-viewer on http://0.0.0.0:${PORT} (${DEMO ? "demo data" : "live Netatmo data"})`,
 );
@@ -410,11 +220,12 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
 async function handle(req: Request, url: URL): Promise<Response> {
   const { pathname } = url;
 
-  if (pathname === "/api/weather") {
-    if (!cache) await refresh();
-    return json(cache);
+  if (pathname === "/api/weather") return json(await station.data());
+  if (pathname === "/api/setup" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    const { status, error } = await station.setup(body);
+    return json(error ? { error } : { ok: true }, status);
   }
-  if (pathname === "/api/setup" && req.method === "POST") return setup(req);
   if (pathname === "/api/shelly") {
     return new Response(
       `Shelly sensors connect to their own port: set the sensor's Outbound WebSocket to ` +
@@ -428,8 +239,8 @@ async function handle(req: Request, url: URL): Promise<Response> {
       if (pathname === "/api/facts") return await factsApi(url.searchParams);
       return await archiveApi(pathname, url.searchParams);
     } catch (e) {
-      console.warn(`${pathname} failed:`, (e as Error).message);
-      return json({ error: (e as Error).message }, 500);
+      console.warn(`${pathname} failed:`, message(e));
+      return json({ error: message(e) }, 500);
     }
   }
   if (pathname === "/healthz") return new Response("ok");

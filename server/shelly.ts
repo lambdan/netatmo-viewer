@@ -6,6 +6,7 @@
 
 import type { Module } from "../shared/types.ts";
 import type { Archive } from "./db.ts";
+import { message, now, round1 } from "./util.ts";
 
 const SETTING = "shelly_devices";
 /** On batteries the H&T reports at least every 2 hours; on USB power every 5 minutes. */
@@ -36,9 +37,6 @@ interface Status {
   "humidity:0"?: { rh?: number | null };
   "devicepower:0"?: { battery?: { percent?: number }; external?: { present?: boolean } };
 }
-
-const round1 = (v: number) => Math.round(v * 10) / 10;
-const now = () => Math.floor(Date.now() / 1000);
 
 export class Shelly {
   #devices = new Map<string, ShellyDevice>();
@@ -92,7 +90,7 @@ export class Shelly {
         this.#serve(conn).catch((e) =>
           console.warn(
             `Shelly: connection from ${host(conn)} failed:`,
-            (e as Error).message,
+            message(e),
           )
         );
       }
@@ -148,7 +146,7 @@ export class Shelly {
             );
           }
         } catch (e) {
-          console.warn(`Shelly: handling a message from ${msg.src} failed:`, (e as Error).message);
+          console.warn(`Shelly: handling a message from ${msg.src} failed:`, message(e));
         }
       }
       console.log(`Shelly: ${src ?? from} disconnected${sleeping ? " (went to sleep)" : ""}`);

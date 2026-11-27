@@ -4,6 +4,7 @@
 import type { Module, ModuleKind } from "../shared/types.ts";
 import type { Archive, Column, Row } from "./db.ts";
 import type { Netatmo } from "./netatmo.ts";
+import { message, now, sleep } from "./util.ts";
 
 /** Netatmo measure type -> archive column, per module kind. */
 const TYPES: Record<ModuleKind, [string, Column][]> = {
@@ -35,8 +36,6 @@ const ERROR_DELAY_MS = 5 * 60 * 1000;
 /** On a fresh archive, start live sync this far back so the 24h chart works right away. */
 const INITIAL_LOOKBACK = 2 * 24 * 3600;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const now = () => Math.floor(Date.now() / 1000);
 const month = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 7);
 
 export class Sync {
@@ -67,7 +66,7 @@ export class Sync {
           backfilledFrom: state.backfilledFrom ?? from,
         });
       } catch (e) {
-        console.warn(`sync for ${m.name} failed:`, (e as Error).message);
+        console.warn(`sync for ${m.name} failed:`, message(e));
       }
     }
     if (added.length) console.log(`Synced new readings: ${added.join(", ")}`);
@@ -166,7 +165,7 @@ export class Sync {
         }
         await sleep(BACKFILL_DELAY_MS);
       } catch (e) {
-        console.warn(`backfill for ${m.name} failed, retrying later:`, (e as Error).message);
+        console.warn(`backfill for ${m.name} failed, retrying later:`, message(e));
         await sleep(ERROR_DELAY_MS);
       }
     }

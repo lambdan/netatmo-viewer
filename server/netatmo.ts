@@ -2,6 +2,7 @@
 // https://dev.netatmo.com/apidocumentation/weather
 
 import type { Module, ModuleKind, Trend, WeatherData } from "../shared/types.ts";
+import { message } from "./util.ts";
 
 // Overridable so the server can be tested against a fake Netatmo.
 const API = Deno.env.get("NETATMO_API_URL") || "https://api.netatmo.com";
@@ -110,7 +111,7 @@ export class Netatmo {
       await this.config.tokenStore.save(tokens);
     } catch (e) {
       // Not fatal: the tokens still work from memory, they just won't survive a restart.
-      console.warn("Could not save tokens:", (e as Error).message);
+      console.warn("Could not save tokens:", message(e));
     }
     return tokens;
   }

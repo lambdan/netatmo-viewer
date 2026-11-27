@@ -2,20 +2,21 @@
 
 import type { WeatherData } from "../shared/types.ts";
 import type { Archive, Row } from "./db.ts";
+import { now as nowSeconds, round1 } from "./util.ts";
 
 function curve(base: number, amp: number, phase: number): [number, number][] {
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
   const out: [number, number][] = [];
   for (let t = now - 24 * 3600; t <= now; t += 1800) {
     const hour = (t / 3600) % 24;
     const v = base + amp * Math.sin(((hour - phase) / 24) * 2 * Math.PI) + Math.random() * 0.3;
-    out.push([t, Math.round(v * 10) / 10]);
+    out.push([t, round1(v)]);
   }
   return out;
 }
 
 export function demoData(): WeatherData {
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
   const outdoor = curve(7, 4, 9);
   const living = curve(21.5, 0.8, 12);
   const bedroom = curve(19, 0.6, 14);
@@ -82,7 +83,7 @@ export function demoData(): WeatherData {
 
 /** Fills an (in-memory) archive with ~2 years of plausible 30 minute data for the demo modules. */
 export async function seedDemoArchive(archive: Archive) {
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
   const start = now - 2 * 365 * 24 * 3600 - 60 * 24 * 3600;
   const step = 1800;
   const year = 365.25 * 24 * 3600;
@@ -100,16 +101,16 @@ export async function seedDemoArchive(archive: Archive) {
     const out = 7 + 10 * season + (3 + 2 * season) * daily + weather + trend;
     pressure = Math.min(1045, Math.max(975, pressure + (Math.random() - 0.5) * 0.8));
 
-    outdoor.push([t, [round(out), Math.round(80 - 15 * season - 8 * daily)]]);
+    outdoor.push([t, [round1(out), Math.round(80 - 15 * season - 8 * daily)]]);
     living.push([t, [
-      round(21.5 + 0.8 * daily + 0.3 * season),
+      round1(21.5 + 0.8 * daily + 0.3 * season),
       Math.round(40 + 8 * season),
       Math.round(550 + 350 * Math.max(0, daily)),
-      round(pressure),
+      round1(pressure),
       Math.round(35 + 10 * Math.max(0, daily)),
     ]]);
     bedroom.push([t, [
-      round(19.5 + 0.6 * daily + 0.5 * season),
+      round1(19.5 + 0.6 * daily + 0.5 * season),
       Math.round(45 + 6 * season),
       Math.round(600 + 600 * Math.max(0, -daily)),
     ]]);
@@ -121,5 +122,3 @@ export async function seedDemoArchive(archive: Archive) {
   await archive.addEvent(now - 400 * 24 * 3600, "Moved to the new house", ["base", "outdoor"]);
   await archive.addEvent(now - 120 * 24 * 3600, "Moved next to the window", ["bedroom"]);
 }
-
-const round = (v: number) => Math.round(v * 10) / 10;

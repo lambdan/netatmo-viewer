@@ -4,8 +4,9 @@
 // hourly table, so it's cheap even with years of history. Each fact is an id plus values; the page
 // words it in the viewer's language and formats the values in their locale and unit.
 
-import type { Fact, FactVars, Module } from "../shared/types.ts";
-import type { Archive, Metric } from "./db.ts";
+import type { Fact, FactVars, Metric, Module } from "../shared/types.ts";
+import type { Archive } from "./db.ts";
+import { now as nowSeconds, round1 } from "./util.ts";
 
 export interface Day {
   /** Local date, YYYY-MM-DD */
@@ -36,7 +37,6 @@ const DAY_MS = 86400 * 1000;
 const dayNumber = (d: string) =>
   Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / DAY_MS;
 const daysBetween = (a: string, b: string) => Math.round(dayNumber(b) - dayNumber(a));
-const r1 = (v: number) => Math.round(v * 10) / 10;
 
 /**
  * Finds the most recent day before today at least as extreme as today's value. Returns how many
@@ -119,7 +119,7 @@ export function computeFacts(input: FactInput): Fact[] {
 
     // Compared with this time yesterday.
     if (out.now !== undefined && out.dayAgo !== undefined) {
-      const diff = r1(out.now - out.dayAgo);
+      const diff = round1(out.now - out.dayAgo);
       if (Math.abs(diff) < 0.5) {
         facts.push({ id: "sameAsYesterday", vars: {}, score: 8, icon: "🔁" });
       } else {
@@ -152,7 +152,7 @@ export function computeFacts(input: FactInput): Fact[] {
       if (lastYear && lastYear.day.slice(5) === md) {
         facts.push({
           id: "yearAgo",
-          vars: { t: r1(lastYear.lo), t2: r1(lastYear.hi) },
+          vars: { t: round1(lastYear.lo), t2: round1(lastYear.hi) },
           score: 12,
           icon: "🗓️",
         });
@@ -163,13 +163,13 @@ export function computeFacts(input: FactInput): Fact[] {
         facts.push(
           {
             id: "dateColdestWas",
-            vars: { md, y: coldest.day.slice(0, 4), t: r1(coldest.lo) },
+            vars: { md, y: coldest.day.slice(0, 4), t: round1(coldest.lo) },
             score: 9,
             icon: "📜",
           },
           {
             id: "dateWarmestWas",
-            vars: { md, y: warmest.day.slice(0, 4), t: r1(warmest.hi) },
+            vars: { md, y: warmest.day.slice(0, 4), t: round1(warmest.hi) },
             score: 8,
             icon: "📜",
           },
@@ -195,7 +195,7 @@ export function computeFacts(input: FactInput): Fact[] {
       if (thisMonth.length >= dom - 1 && others.length) {
         const now = mean(thisMonth);
         const usual = others.reduce((a, b) => a + b, 0) / others.length;
-        const diff = r1(now - usual);
+        const diff = round1(now - usual);
         const m = +month;
         if (others.length >= 2 && others.every((o) => now < o)) {
           facts.push({
@@ -270,7 +270,7 @@ export function computeFacts(input: FactInput): Fact[] {
 
     // Inside vs outside.
     if (out.now !== undefined && input.indoor !== undefined) {
-      const diff = r1(input.indoor - out.now);
+      const diff = round1(input.indoor - out.now);
       if (diff >= 10) {
         facts.push({ id: "insideWarmer", vars: { dt: diff }, score: 7 + diff / 4, icon: "🏠" });
       }
@@ -323,7 +323,7 @@ export async function loadFacts(archive: Archive, modules: Module[], tz: string)
     month: "2-digit",
     day: "2-digit",
   });
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
   const daily = async (id: string, metric: Metric): Promise<Day[]> =>
     (await archive.series(id, metric, 0, now + 1, 86400, tz)).map(([t, avg, lo, hi]) => ({
       day: localDay(fmt, t),
