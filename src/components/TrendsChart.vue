@@ -2,8 +2,9 @@
 import { computed, ref } from "vue";
 import { fixed } from "../format.ts";
 import { t } from "../i18n.ts";
-import { niceStep } from "../period.ts";
 import { type YearTrend, yearColor } from "../trends.ts";
+import { niceScale, svgPath } from "../chart.ts";
+import ChartFrame from "./ChartFrame.vue";
 
 const props = defineProps<{
   years: YearTrend[];
@@ -11,58 +12,41 @@ const props = defineProps<{
   decimals: number;
   unit: string;
   light: boolean;
-  /** Where to mark freezing with a line (0 or 32), if wanted and in range. */
+  /** Where to mark freezing with a line (0 or 32), if wanted. */
   freezing?: number;
 }>();
 
-const W = 1000;
-const H = 400;
-const el = ref<HTMLElement>();
 const activeMonth = ref<number>();
 
 const pct = (v: number) => `${v}%`;
 const xOf = (m: number) => ((m + 0.5) / 12) * 100;
+const colorOf = (i: number) => yearColor(i, props.years.length, props.light);
 
 const scale = computed(() => {
   const values = props.years.flatMap((y) => y.months.filter((v): v is number => v !== null));
-  if (!values.length) return undefined;
-  let lo = Math.min(...values);
-  let hi = Math.max(...values);
-  const step = niceStep(Math.max(hi - lo, 1), 5);
-  lo = Math.floor(lo / step) * step;
-  hi = Math.ceil(hi / step) * step;
-  if (hi === lo) hi = lo + step;
-  const grid: number[] = [];
-  for (let v = lo; v <= hi + step / 2; v += step) grid.push(v);
-  return { grid, yOf: (v: number) => (1 - (v - lo) / (hi - lo)) * 100 };
-});
-
-// Only when freezing falls within the scale; the range is left to follow the data.
-const freezeTop = computed(() => {
-  const y = props.freezing !== undefined ? scale.value?.yOf(props.freezing) : undefined;
-  return y !== undefined && y >= 0 && y <= 100 ? y : undefined;
+  return values.length ? niceScale(Math.min(...values), Math.max(...values), 1) : undefined;
 });
 
 const lines = computed(() => {
   const s = scale.value;
   if (!s) return [];
   return props.years.map((y, i) => {
+    // A new piece of line after each month without data.
     let d = "";
-    let pen = false;
+    let run: [number, number][] = [];
     y.months.forEach((v, m) => {
-      if (v === null) {
-        pen = false;
-        return;
+      if (v !== null) run.push([xOf(m), s.yOf(v)]);
+      if ((v === null || m === 11) && run.length) {
+        d += svgPath(run);
+        run = [];
       }
-      d += `${pen ? "L" : "M"}${((xOf(m) / 100) * W).toFixed(1)},${((s.yOf(v) / 100) * H).toFixed(1)}`;
-      pen = true;
     });
-    const newest = i === props.years.length - 1;
     return {
       year: y.year,
       d,
-      color: yearColor(i, props.years.length, props.light),
-      width: newest ? 3.5 : 2,
+      color: colorOf(i),
+      // The newest year stands out.
+      width: i === props.years.length - 1 ? 3.5 : 2,
       dots: y.months
         .map((v, m) => (v === null ? undefined : { left: pct(xOf(m)), top: pct(s.yOf(v)) }))
         .filter((p) => p !== undefined),
@@ -70,116 +54,63 @@ const lines = computed(() => {
   });
 });
 
-function pick(clientX: number) {
-  if (!el.value) return;
-  const rect = el.value.getBoundingClientRect();
-  activeMonth.value = Math.max(0, Math.min(11, Math.floor(((clientX - rect.left) / rect.width) * 12)));
+const xLabels = computed(() =>
+  props.monthNames.map((label, m) => ({ key: m, left: xOf(m), label }))
+);
+
+function pick(at: number) {
+  activeMonth.value = Math.max(0, Math.min(11, Math.floor(at * 12)));
 }
 
 const tip = computed(() => {
   const m = activeMonth.value;
   if (m === undefined) return undefined;
   const rows = props.years
-    .map((y, i) => ({ year: y.year, v: y.months[m], color: yearColor(i, props.years.length, props.light) }))
+    .map((y, i) => ({ year: y.year, v: y.months[m], color: colorOf(i) }))
     .filter((r) => r.v !== null)
     .reverse();
-  return { x: xOf(m), alignRight: m >= 8, month: props.monthNames[m], rows };
+  return { x: xOf(m), month: props.monthNames[m], rows };
 });
 </script>
 
 <template>
-  <div class="chart">
-    <div
-      class="plot"
-      ref="el"
-      @touchstart.prevent="pick($event.touches[0].clientX)"
-      @touchmove.prevent="pick($event.touches[0].clientX)"
-      @mousemove="pick($event.clientX)"
-      @mouseleave="activeMonth = undefined"
-    >
-      <template v-if="scale">
-        <div v-for="v in scale.grid" :key="v" class="hline" :style="{ top: pct(scale.yOf(v)) }">
-          <span class="ylabel">{{ fixed(v, v % 1 ? 1 : 0) }}</span>
-        </div>
-      </template>
-      <div v-if="freezeTop !== undefined" class="freeze-line" :style="{ top: pct(freezeTop) }" />
-      <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none">
-        <path
-          v-for="l in lines"
-          :key="l.year"
-          :d="l.d"
-          fill="none"
-          :stroke="l.color"
-          :stroke-width="l.width"
-          stroke-linejoin="round"
-          vector-effect="non-scaling-stroke"
-        />
-      </svg>
-      <template v-for="l in lines" :key="`dots-${l.year}`">
-        <span v-for="(p, i) in l.dots" :key="i" class="dot" :style="{ ...p, background: l.color }" />
-      </template>
+  <ChartFrame
+    :scale="scale"
+    :freezing="freezing"
+    :x-labels="xLabels"
+    :cursor="tip?.x"
+    :empty="years.length ? undefined : t('noDataYet')"
+    @pick="pick"
+    @leave="activeMonth = undefined"
+  >
+    <template #svg>
+      <path
+        v-for="l in lines"
+        :key="l.year"
+        :d="l.d"
+        fill="none"
+        :stroke="l.color"
+        :stroke-width="l.width"
+        stroke-linejoin="round"
+        vector-effect="non-scaling-stroke"
+      />
+    </template>
 
-      <template v-if="tip">
-        <div class="cursor" :style="{ left: pct(tip.x) }" />
-        <div class="tip" :class="{ right: tip.alignRight }" :style="{ left: pct(tip.x) }">
-          <span class="month">{{ tip.month }}</span>
-          <span v-for="r in tip.rows" :key="r.year" class="row">
-            <i :style="{ background: r.color }" />{{ r.year }}
-            <strong>{{ fixed(r.v!, decimals) }}{{ unit }}</strong>
-          </span>
-        </div>
-      </template>
-      <div v-if="!years.length" class="empty">{{ t("noDataYet") }}</div>
-    </div>
-    <div class="xlabels">
-      <span v-for="(name, m) in monthNames" :key="m" :style="{ left: pct(xOf(m)) }">{{ name }}</span>
-    </div>
-  </div>
+    <template v-for="l in lines" :key="`dots-${l.year}`">
+      <span v-for="(p, i) in l.dots" :key="i" class="dot" :style="{ ...p, background: l.color }" />
+    </template>
+
+    <template v-if="tip" #tip>
+      <span class="month">{{ tip.month }}</span>
+      <span v-for="r in tip.rows" :key="r.year" class="row">
+        <i :style="{ background: r.color }" />{{ r.year }}
+        <strong>{{ fixed(r.v!, decimals) }}{{ unit }}</strong>
+      </span>
+    </template>
+  </ChartFrame>
 </template>
 
 <style scoped>
-.chart {
-  position: relative;
-  height: 100%;
-  padding: 10px 0 26px 44px;
-}
-.plot {
-  position: relative;
-  height: 100%;
-  -webkit-user-select: none;
-  user-select: none;
-}
-svg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.hline {
-  position: absolute;
-  left: 0;
-  right: 0;
-  border-top: 1px solid var(--line);
-}
-.freeze-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  border-top: 2px solid var(--freeze);
-  opacity: 0.7;
-}
-.ylabel {
-  position: absolute;
-  left: -44px;
-  width: 36px;
-  top: -8px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
 .dot {
   position: absolute;
   width: 6px;
@@ -187,80 +118,27 @@ svg {
   margin: -3px 0 0 -3px;
   border-radius: 50%;
 }
-.xlabels {
-  position: absolute;
-  left: 44px;
-  right: 0;
-  bottom: 0;
-  height: 18px;
-}
-.xlabels span {
-  position: absolute;
-  transform: translateX(-50%);
-  font-size: 12px;
-  color: var(--muted);
-}
-.cursor {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-left: 1px solid var(--muted);
-}
-.tip {
-  position: absolute;
-  top: 0;
-  margin-left: 10px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--bg);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  white-space: nowrap;
-  pointer-events: none;
-}
-.tip.right {
-  transform: translateX(-100%);
-  margin-left: -10px;
-}
-.tip .month {
+.month {
   display: block;
   margin-bottom: 4px;
   font-size: 13px;
   color: var(--muted);
   text-transform: capitalize;
 }
-.tip .row {
+.row {
   display: block;
   font-size: 15px;
   line-height: 1.6;
 }
-.tip i {
+i {
   display: inline-block;
   width: 9px;
   height: 9px;
   margin-right: 7px;
   border-radius: 50%;
 }
-.tip strong {
+strong {
   margin-left: 12px;
   font-weight: 500;
-}
-.empty {
-  position: absolute;
-  top: 45%;
-  left: 0;
-  right: 0;
-  text-align: center;
-  color: var(--muted);
-}
-
-/* Phones: only every other axis label, so they don't overlap. */
-@media (max-width: 600px) {
-  .xlabels span:nth-child(even) {
-    display: none;
-  }
-  .xlabels span,
-  .ylabel {
-    font-size: 11px;
-  }
 }
 </style>

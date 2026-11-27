@@ -3,11 +3,14 @@ import { computed, ref, watch } from "vue";
 import type { StationEvent } from "../../shared/types.ts";
 import { fixed, fmtDate } from "../format.ts";
 import { t } from "../i18n.ts";
-import { niceStep, type Tick } from "../period.ts";
+import type { Tick } from "../period.ts";
+import { niceScale, svgPath } from "../chart.ts";
+import ChartFrame from "./ChartFrame.vue";
+
+type Point = [start: number, avg: number, min: number, max: number];
 
 const props = defineProps<{
-  /** [bucket start, avg, min, max] */
-  points: [number, number, number, number][];
+  points: Point[];
   from: number;
   to: number;
   bucket: number;
@@ -17,23 +20,17 @@ const props = defineProps<{
   unit: string;
   tipFormat: Intl.DateTimeFormatOptions;
   events?: StationEvent[];
-  /** Where to mark freezing with a line (0 or 32), if wanted and in range. */
+  /** Where to mark freezing with a line (0 or 32), if wanted. */
   freezing?: number;
 }>();
 
-const W = 1000;
-const H = 400;
-const el = ref<HTMLElement>();
 const active = ref<number>();
 watch(() => props.points, () => (active.value = undefined));
 
 const pct = (v: number) => `${v}%`;
-const visibleEvents = computed(() =>
-  (props.events ?? []).filter((e) => e.at >= props.from && e.at < props.to)
-);
 const xOf = (t: number) => ((t - props.from) / (props.to - props.from)) * 100;
 // Plot each bucket in its middle.
-const center = (p: [number, number, number, number]) => Math.min(p[0] + props.bucket / 2, props.to);
+const center = (p: Point) => Math.min(p[0] + props.bucket / 2, props.to);
 
 const scale = computed(() => {
   if (!props.points.length) return undefined;
@@ -43,29 +40,15 @@ const scale = computed(() => {
     if (p[2] < lo) lo = p[2];
     if (p[3] > hi) hi = p[3];
   }
-  const step = niceStep(Math.max(hi - lo, Math.pow(10, -props.decimals) * 10), 5);
-  lo = Math.floor(lo / step) * step;
-  hi = Math.ceil(hi / step) * step;
-  if (hi === lo) hi = lo + step;
-  const grid: number[] = [];
-  for (let v = lo; v <= hi + step / 2; v += step) grid.push(v);
-  return { lo, hi, grid, yOf: (v: number) => (1 - (v - lo) / (hi - lo)) * 100 };
-});
-
-// Only when freezing falls within the scale; the range is left to follow the data.
-const freezeTop = computed(() => {
-  const y = props.freezing !== undefined ? scale.value?.yOf(props.freezing) : undefined;
-  return y !== undefined && y >= 0 && y <= 100 ? y : undefined;
+  return niceScale(lo, hi, Math.pow(10, -props.decimals) * 10);
 });
 
 const paths = computed(() => {
   const s = scale.value;
   if (!s) return { line: "", band: "" };
-  const X = (t: number) => (xOf(t) / 100) * W;
-  const Y = (v: number) => (s.yOf(v) / 100) * H;
   // Don't draw across gaps (station offline etc).
-  const segments: [number, number, number, number][][] = [];
-  let cur: [number, number, number, number][] = [];
+  const segments: Point[][] = [];
+  let cur: Point[] = [];
   for (const p of props.points) {
     if (cur.length && p[0] - cur[cur.length - 1][0] > props.bucket * 3) {
       segments.push(cur);
@@ -77,23 +60,30 @@ const paths = computed(() => {
 
   let line = "";
   let band = "";
+  const at = (p: Point, v: number): [number, number] => [xOf(center(p)), s.yOf(v)];
   for (const seg of segments) {
-    line += seg.map((p, i) => `${i ? "L" : "M"}${X(center(p)).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+    line += svgPath(seg.map((p) => at(p, p[1])));
     if (seg.length > 1) {
-      band += seg.map((p, i) => `${i ? "L" : "M"}${X(center(p)).toFixed(1)},${Y(p[3]).toFixed(1)}`).join("");
-      band += seg.slice().reverse().map((p) => `L${X(center(p)).toFixed(1)},${Y(p[2]).toFixed(1)}`).join("");
-      band += "Z";
+      // Along the maxima, back along the minima.
+      band += svgPath(seg.map((p) => at(p, p[3])));
+      band += svgPath(seg.slice().reverse().map((p) => at(p, p[2])), "L") + "Z";
     }
   }
   return { line, band };
 });
 
-function pick(clientX: number) {
+const visibleEvents = computed(() =>
+  (props.events ?? []).filter((e) => e.at >= props.from && e.at < props.to)
+);
+const xLabels = computed(() =>
+  props.ticks.map((tk) => ({ key: tk.t, left: xOf(tk.labelAt), label: tk.label }))
+);
+
+/** The bucket nearest to where the finger is. */
+function pick(at: number) {
   const pts = props.points;
-  if (!el.value || !pts.length) return;
-  const rect = el.value.getBoundingClientRect();
-  const t = props.from + ((clientX - rect.left) / rect.width) * (props.to - props.from);
-  // Binary search for the nearest bucket.
+  if (!pts.length) return;
+  const t = props.from + at * (props.to - props.from);
   let lo = 0;
   let hi = pts.length - 1;
   while (lo < hi) {
@@ -107,144 +97,68 @@ function pick(clientX: number) {
 
 const tip = computed(() => {
   const s = scale.value;
-  if (active.value === undefined || !s) return undefined;
-  const p = props.points[active.value];
-  if (!p) return undefined;
-  const x = xOf(center(p));
+  const p = active.value === undefined ? undefined : props.points[active.value];
+  if (!s || !p) return undefined;
+  const d = props.decimals;
   return {
-    x,
+    x: xOf(center(p)),
     y: s.yOf(p[1]),
-    alignRight: x > 70,
-    value: `${fixed(p[1], props.decimals)}${props.unit}`,
-    range: p[2] !== p[3] ? `${fixed(p[2], props.decimals)} – ${fixed(p[3], props.decimals)}${props.unit}` : "",
+    value: `${fixed(p[1], d)}${props.unit}`,
+    range: p[2] !== p[3] ? `${fixed(p[2], d)} – ${fixed(p[3], d)}${props.unit}` : "",
     time: fmtDate(p[0], props.tipFormat),
   };
 });
 </script>
 
 <template>
-  <div class="chart">
-    <div
-      class="plot"
-      ref="el"
-      @touchstart.prevent="pick($event.touches[0].clientX)"
-      @touchmove.prevent="pick($event.touches[0].clientX)"
-      @mousemove="pick($event.clientX)"
-      @mouseleave="active = undefined"
-    >
-      <template v-if="scale">
-        <div v-for="v in scale.grid" :key="v" class="hline" :style="{ top: pct(scale.yOf(v)) }">
-          <span class="ylabel">{{ fixed(v, v % 1 ? 1 : 0) }}</span>
-        </div>
-      </template>
-      <div v-if="freezeTop !== undefined" class="freeze-line" :style="{ top: pct(freezeTop) }" />
-      <div v-for="t in ticks" :key="t.t" class="vline" :style="{ left: pct(xOf(t.t)) }" />
+  <ChartFrame
+    :scale="scale"
+    :freezing="freezing"
+    :x-labels="xLabels"
+    :cursor="tip?.x"
+    :empty="points.length ? undefined : t('noDataPeriod')"
+    @pick="pick"
+    @leave="active = undefined"
+  >
+    <template #under>
+      <div v-for="tk in ticks" :key="tk.t" class="vline" :style="{ left: pct(xOf(tk.t)) }" />
       <template v-for="e in visibleEvents" :key="e.id">
         <div class="event-line" :style="{ left: pct(xOf(e.at)) }" />
-        <span
-          class="event-label"
-          :class="{ right: xOf(e.at) > 75 }"
-          :style="{ left: pct(xOf(e.at)) }"
-        >{{ e.label }}</span>
+        <span class="event-label" :class="{ right: xOf(e.at) > 75 }" :style="{ left: pct(xOf(e.at)) }">
+          {{ e.label }}
+        </span>
       </template>
+    </template>
 
-      <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none">
-        <path :d="paths.band" :fill="color" fill-opacity="0.2" />
-        <path
-          :d="paths.line"
-          fill="none"
-          :stroke="color"
-          stroke-width="2.5"
-          stroke-linejoin="round"
-          vector-effect="non-scaling-stroke"
-        />
-      </svg>
+    <template #svg>
+      <path :d="paths.band" :fill="color" fill-opacity="0.2" />
+      <path
+        :d="paths.line"
+        fill="none"
+        :stroke="color"
+        stroke-width="2.5"
+        stroke-linejoin="round"
+        vector-effect="non-scaling-stroke"
+      />
+    </template>
 
-      <template v-if="tip">
-        <div class="cursor" :style="{ left: pct(tip.x) }" />
-        <div class="dot" :style="{ left: pct(tip.x), top: pct(tip.y), background: color }" />
-        <div class="tip" :class="{ right: tip.alignRight }" :style="{ left: pct(tip.x) }">
-          <strong>{{ tip.value }}</strong>
-          <span v-if="tip.range" class="range">{{ tip.range }}</span>
-          <span class="time">{{ tip.time }}</span>
-        </div>
-      </template>
-
-      <div v-if="!points.length" class="empty">{{ t("noDataPeriod") }}</div>
-    </div>
-    <div class="xlabels">
-      <span v-for="t in ticks" :key="t.t" :style="{ left: pct(xOf(t.labelAt)) }">{{ t.label }}</span>
-    </div>
-  </div>
+    <template v-if="tip" #marker>
+      <div class="dot" :style="{ left: pct(tip.x), top: pct(tip.y), background: color }" />
+    </template>
+    <template v-if="tip" #tip>
+      <strong>{{ tip.value }}</strong>
+      <span v-if="tip.range" class="tip-line">{{ tip.range }}</span>
+      <span class="tip-line">{{ tip.time }}</span>
+    </template>
+  </ChartFrame>
 </template>
 
 <style scoped>
-.chart {
-  position: relative;
-  height: 100%;
-  padding: 10px 0 26px 44px;
-}
-.plot {
-  position: relative;
-  height: 100%;
-  -webkit-user-select: none;
-  user-select: none;
-}
-svg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.hline,
 .vline {
   position: absolute;
-  border-color: var(--line);
-  border-style: solid;
-  border-width: 0;
-}
-.hline {
-  left: 0;
-  right: 0;
-  border-top-width: 1px;
-}
-.vline {
   top: 0;
   bottom: 0;
-  border-left-width: 1px;
-}
-.ylabel {
-  position: absolute;
-  left: -44px;
-  width: 36px;
-  top: -8px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.xlabels {
-  position: absolute;
-  left: 44px;
-  right: 0;
-  bottom: 0;
-  height: 18px;
-}
-.xlabels span {
-  position: absolute;
-  transform: translateX(-50%);
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.freeze-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  border-top: 2px solid var(--freeze);
-  opacity: 0.7;
+  border-left: 1px solid var(--line);
 }
 .event-line {
   position: absolute;
@@ -269,12 +183,6 @@ svg {
   transform: translateX(-100%);
   margin-left: -6px;
 }
-.cursor {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-left: 1px solid var(--muted);
-}
 .dot {
   position: absolute;
   width: 10px;
@@ -283,48 +191,14 @@ svg {
   border-radius: 50%;
   box-shadow: 0 0 0 3px var(--card);
 }
-.tip {
-  position: absolute;
-  top: 0;
-  margin-left: 10px;
-  padding: 7px 11px;
-  border-radius: 10px;
-  background: var(--bg);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  white-space: nowrap;
-  pointer-events: none;
-}
-.tip.right {
-  transform: translateX(-100%);
-  margin-left: -10px;
-}
-.tip strong {
+strong {
   display: block;
   font-size: 20px;
   font-weight: 500;
 }
-.tip span {
+.tip-line {
   display: block;
   font-size: 13px;
   color: var(--muted);
-}
-.empty {
-  position: absolute;
-  top: 45%;
-  left: 0;
-  right: 0;
-  text-align: center;
-  color: var(--muted);
-}
-
-/* Phones: only every other axis label, so they don't overlap. */
-@media (max-width: 600px) {
-  .xlabels span:nth-child(even) {
-    display: none;
-  }
-  .xlabels span,
-  .ylabel {
-    font-size: 11px;
-  }
 }
 </style>

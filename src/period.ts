@@ -138,11 +138,3 @@ export function recordStarts(now = new Date()) {
     year: secs(startOf("year", now)),
   };
 }
-
-/** Nice round step for about `count` grid lines across `span`. */
-export function niceStep(span: number, count = 5): number {
-  const raw = span / count;
-  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
-  const n = raw / pow;
-  return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * pow;
-}
