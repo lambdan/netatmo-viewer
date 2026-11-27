@@ -4,6 +4,7 @@ import type { Module, StationEvent } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { fmtDate } from "../format.ts";
 import { t } from "../i18n.ts";
+import Modal from "./Modal.vue";
 
 const props = defineProps<{ events: StationEvent[]; modules: Module[]; currentModule: string }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
@@ -83,105 +84,47 @@ async function run(fn: () => Promise<unknown>) {
 </script>
 
 <template>
-  <div class="overlay" @click.self="emit('close')">
-    <div class="panel">
-      <h2>{{ t("events") }}</h2>
-      <p class="note">{{ t("eventsNote") }}</p>
+  <Modal :title="t('events')" :width="520" @close="emit('close')">
+    <p class="note">{{ t("eventsNote") }}</p>
 
-      <div
-        v-for="e in events.slice().reverse()"
-        :key="e.id"
-        class="event"
-        :class="{ editing: editing?.id === e.id }"
-        @click="startEdit(e)"
-      >
-        <span class="when">{{ fmtDate(e.at, { day: "numeric", month: "short", year: "numeric" }) }}</span>
-        <span class="label">{{ e.label }}<small>{{ moduleNames(e.moduleIds) }}</small></span>
-        <button class="delete" :disabled="busy" @click.stop="remove(e)" :aria-label="t('delete')">×</button>
-      </div>
-      <p v-if="!events.length" class="note">{{ t("noEvents") }}</p>
-      <p v-else class="note">{{ t("tapToEdit") }}</p>
-
-      <h3>{{ t(editing ? "editEvent" : "newEvent") }}</h3>
-      <form class="add" @submit.prevent="save">
-        <div class="modules">
-          <label v-for="m in modules" :key="m.id" :class="{ checked: moduleIds.includes(m.id) }">
-            <input type="checkbox" :value="m.id" v-model="moduleIds" />{{ m.name }}
-          </label>
-        </div>
-        <input type="date" v-model="date" />
-        <input type="text" v-model="label" maxlength="100" :placeholder="t('whatHappened')" />
-        <button type="submit" :disabled="busy || !label.trim()">{{ t(editing ? "save" : "add") }}</button>
-      </form>
-      <button v-if="editing" class="cancel" @click="resetForm">{{ t("cancelEditing") }}</button>
-      <p v-if="error" class="error">{{ error }}</p>
-
-      <button class="done" @click="emit('close')">{{ t("done") }}</button>
+    <div
+      v-for="e in events.slice().reverse()"
+      :key="e.id"
+      class="event"
+      :class="{ editing: editing?.id === e.id }"
+      @click="startEdit(e)"
+    >
+      <span class="when">{{ fmtDate(e.at, { day: "numeric", month: "short", year: "numeric" }) }}</span>
+      <span class="label">{{ e.label }}<small>{{ moduleNames(e.moduleIds) }}</small></span>
+      <button class="delete" :disabled="busy" @click.stop="remove(e)" :aria-label="t('delete')">×</button>
     </div>
-  </div>
+    <p class="note">{{ t(events.length ? "tapToEdit" : "noEvents") }}</p>
+
+    <h3 class="section-title">{{ t(editing ? "editEvent" : "newEvent") }}</h3>
+    <form class="add" @submit.prevent="save">
+      <div class="modules">
+        <label v-for="m in modules" :key="m.id" :class="{ checked: moduleIds.includes(m.id) }">
+          <input type="checkbox" :value="m.id" v-model="moduleIds" />{{ m.name }}
+        </label>
+      </div>
+      <input type="date" v-model="date" />
+      <input type="text" v-model="label" maxlength="100" :placeholder="t('whatHappened')" />
+      <button type="submit" :disabled="busy || !label.trim()">{{ t(editing ? "save" : "add") }}</button>
+    </form>
+    <button v-if="editing" class="cancel" @click="resetForm">{{ t("cancelEditing") }}</button>
+    <p v-if="error" class="error">{{ error }}</p>
+  </Modal>
 </template>
 
 <style scoped>
-.overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10;
-  display: -webkit-flex;
-  display: flex;
-  -webkit-align-items: center;
-  align-items: center;
-  -webkit-justify-content: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-}
-.panel {
-  width: 520px;
-  max-width: 92%;
-  max-height: 90%;
-  overflow: auto;
-  padding: 24px 26px 20px;
-  border-radius: 18px;
-  background: var(--card);
-  color: var(--text);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-}
-h2 {
-  margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
 .note {
   margin: 0 0 14px;
-  font-size: 13px;
-  color: var(--muted);
 }
 .event {
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: center;
   align-items: center;
   min-height: 46px;
   border-bottom: 1px solid var(--line);
-}
-.when {
-  -webkit-flex: 0 0 120px;
-  flex: 0 0 120px;
-  font-size: 15px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.label {
-  -webkit-flex: 1;
-  flex: 1;
-  font-size: 17px;
-}
-.event {
   cursor: pointer;
 }
 .event.editing {
@@ -190,31 +133,20 @@ h2 {
   border-radius: 10px;
   background: var(--bg);
 }
-h3 {
-  margin: 18px 0 0;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.when {
+  flex: 0 0 120px;
+  font-size: 15px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
-.cancel {
-  margin-top: 4px;
-  font-size: 14px;
-  color: var(--muted);
+.label {
+  flex: 1;
+  font-size: 17px;
 }
 .label small {
   display: block;
   font-size: 12px;
   color: var(--muted);
-}
-button {
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  -webkit-appearance: none;
 }
 .delete {
   width: 40px;
@@ -222,10 +154,18 @@ button {
   font-size: 24px;
   color: var(--muted);
 }
+h3 {
+  margin-top: 18px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+.cancel {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
 .add {
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-wrap: wrap;
   flex-wrap: wrap;
   margin-top: 10px;
 }
@@ -233,7 +173,6 @@ button {
   margin-bottom: 8px;
 }
 .modules {
-  -webkit-flex: 1 0 100%;
   flex: 1 0 100%;
 }
 .modules label {
@@ -271,11 +210,9 @@ input[type="text"] {
   -webkit-appearance: none;
 }
 input[type="date"] {
-  -webkit-flex: 0 0 160px;
   flex: 0 0 160px;
 }
 input[type="text"] {
-  -webkit-flex: 1;
   flex: 1;
 }
 .add button {
@@ -292,24 +229,10 @@ button:disabled {
   margin: 10px 0 0;
   color: var(--warn);
 }
-.done {
-  display: block;
-  width: 100%;
-  margin-top: 18px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--bg);
-  font-size: 17px;
-  font-weight: 600;
-}
 
 /* Phones: one field per row */
 @media (max-width: 600px) {
-  .panel {
-    padding: 20px 18px 16px;
-  }
   .when {
-    -webkit-flex-basis: 92px;
     flex-basis: 92px;
     font-size: 13px;
   }
@@ -317,14 +240,10 @@ button:disabled {
     font-size: 15px;
   }
   input[type="date"],
-  input[type="text"] {
-    -webkit-flex: 1 0 100%;
+  input[type="text"],
+  .add button {
     flex: 1 0 100%;
     margin-right: 0;
-  }
-  .add button {
-    -webkit-flex: 1 0 100%;
-    flex: 1 0 100%;
   }
 }
 </style>

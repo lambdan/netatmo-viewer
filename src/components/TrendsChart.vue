@@ -196,7 +196,6 @@ svg {
 }
 .xlabels span {
   position: absolute;
-  -webkit-transform: translateX(-50%);
   transform: translateX(-50%);
   font-size: 12px;
   color: var(--muted);
@@ -219,7 +218,6 @@ svg {
   pointer-events: none;
 }
 .tip.right {
-  -webkit-transform: translateX(-100%);
   transform: translateX(-100%);
   margin-left: -10px;
 }

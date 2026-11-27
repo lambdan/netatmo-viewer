@@ -109,9 +109,7 @@ onUnmounted(() => {
 <style scoped>
 /* Sits inside the outdoor card, between the readings and the chart. */
 .fact {
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: baseline;
   align-items: baseline;
   margin-top: 28px;
   font-size: 20px;
@@ -119,14 +117,12 @@ onUnmounted(() => {
   color: var(--muted);
   cursor: pointer;
   opacity: 1;
-  -webkit-transition: opacity 0.6s;
   transition: opacity 0.6s;
 }
 .fact.hidden {
   opacity: 0;
 }
 .icon {
-  -webkit-flex: none;
   flex: none;
   margin-right: 10px;
 }

@@ -57,7 +57,7 @@ const staleSince = computed(() => {
 <template>
   <section class="card" :class="{ hero, offline: !m.reachable }">
     <header>
-      <h2>{{ m.name }}</h2>
+      <h2 class="section-title">{{ m.name }}</h2>
       <span v-if="!m.reachable" class="badge warn">{{ staleSince }}</span>
       <span v-else-if="lowBattery" class="badge warn">{{ t("battery", { n: m.battery! }) }}</span>
       <!-- Small cards: the other readings on the name's line, to leave room for the chart. -->
@@ -126,17 +126,10 @@ const staleSince = computed(() => {
 <style scoped>
 .card {
   position: relative;
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-direction: column;
   flex-direction: column;
   padding: 18px 22px;
-  border-radius: 18px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
   overflow: hidden;
-  -webkit-transition: background-color 1.5s, box-shadow 1.5s;
-  transition: background-color 1.5s, box-shadow 1.5s;
 }
 /* Last known values stay readable, just muted, next to the "no data since" badge. */
 .card.offline .main,
@@ -145,19 +138,11 @@ const staleSince = computed(() => {
   opacity: 0.6;
 }
 header {
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: center;
   align-items: center;
 }
 h2 {
-  margin: 0;
   white-space: nowrap;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
 }
 .badge {
   margin-left: 10px;
@@ -173,11 +158,8 @@ h2 {
 }
 
 .main {
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: flex-end;
   align-items: flex-end;
-  -webkit-justify-content: space-between;
   justify-content: space-between;
   margin-top: 2px;
 }
@@ -237,17 +219,13 @@ h2 {
 }
 
 .stats {
-  display: -webkit-flex;
   display: flex;
   margin-top: 14px;
 }
 /* Small cards: on the name's line, without labels (the units say what they are). */
 .inline-stats {
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-wrap: wrap;
   flex-wrap: wrap;
-  -webkit-justify-content: flex-end;
   justify-content: flex-end;
   margin-left: auto;
   padding-left: 10px;
@@ -311,7 +289,6 @@ h2 {
 
 .chart {
   position: relative;
-  -webkit-flex: 1;
   flex: 1;
   min-height: 40px;
   margin: 14px -22px -18px;
@@ -340,7 +317,6 @@ h2 {
     padding-bottom: 10px;
   }
   .stats {
-    -webkit-flex-wrap: wrap;
     flex-wrap: wrap;
   }
   .stat,

@@ -146,20 +146,15 @@ onUnmounted(() => {
 
 <style scoped>
 .app {
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-direction: column;
   flex-direction: column;
   height: 100%;
   padding: 18px 20px 10px;
 }
 
 .top {
-  display: -webkit-flex;
   display: flex;
-  -webkit-justify-content: space-between;
   justify-content: space-between;
-  -webkit-align-items: baseline;
   align-items: baseline;
   padding: 0 4px 14px;
 }
@@ -171,26 +166,15 @@ onUnmounted(() => {
 .gear {
   margin: -10px 6px -10px -8px;
   padding: 10px 8px;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
   font-size: 22px;
-  cursor: pointer;
-  -webkit-appearance: none;
 }
 .link {
   margin-left: 18px;
   padding: 6px 12px;
-  border: 0;
   border-radius: 10px;
   background: var(--card);
-  color: var(--muted);
-  font: inherit;
   font-size: 15px;
   font-weight: 500;
-  cursor: pointer;
-  -webkit-appearance: none;
 }
 .clock .date {
   font-size: 18px;
@@ -204,7 +188,6 @@ onUnmounted(() => {
 }
 
 .grid {
-  -webkit-flex: 1;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -215,14 +198,11 @@ onUnmounted(() => {
   grid-template-columns: 1fr;
 }
 .side {
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-direction: column;
   flex-direction: column;
   min-height: 0;
 }
 .side > * {
-  -webkit-flex: 1;
   flex: 1;
   margin-bottom: 16px;
 }
@@ -231,13 +211,9 @@ onUnmounted(() => {
 }
 
 .empty {
-  -webkit-flex: 1;
   flex: 1;
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: center;
   align-items: center;
-  -webkit-justify-content: center;
   justify-content: center;
   color: var(--muted);
   font-size: 20px;
@@ -261,14 +237,12 @@ onUnmounted(() => {
   }
   .grid {
     grid-template-columns: 1fr;
-    -webkit-align-content: start;
     align-content: start;
   }
   .hero-card {
     min-height: 420px;
   }
   .side > * {
-    -webkit-flex: none;
     flex: none;
     height: 260px;
   }
@@ -280,9 +254,7 @@ onUnmounted(() => {
     padding: 12px 12px 10px;
   }
   .top {
-    -webkit-flex-wrap: wrap;
     flex-wrap: wrap;
-    -webkit-align-items: center;
     align-items: center;
     padding: 0 2px 10px;
   }

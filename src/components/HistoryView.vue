@@ -15,12 +15,13 @@ import { periodFor, type RangeKind, recordStarts, shift, timeZone } from "../per
 import { isLight } from "../theme.ts";
 import { freezingLine, toCelsius, toUnit } from "../units.ts";
 import { t } from "../i18n.ts";
-import { buildYears, yearColor } from "../trends.ts";
+import { buildYears } from "../trends.ts";
 import EventsPanel from "./EventsPanel.vue";
 import HistoryChart from "./HistoryChart.vue";
 import RecordsPanel from "./RecordsPanel.vue";
 import Segmented from "./Segmented.vue";
 import TrendsChart from "./TrendsChart.vue";
+import YearsPanel from "./YearsPanel.vue";
 
 const props = defineProps<{ modules: Module[]; initialModule?: string }>();
 const emit = defineEmits<{ close: [] }>();
@@ -120,10 +121,6 @@ loadEvents();
 /** Events that affected the module being viewed. */
 const moduleEvents = computed(() => events.value.filter((e) => e.moduleIds.includes(moduleId.value)));
 
-function eventsIn(year: number) {
-  return moduleEvents.value.filter((e) => new Date(e.at * 1000).getFullYear() === year);
-}
-
 // --- derived display data ---
 
 // Temperatures arrive in °C; these are in the unit chosen in the settings.
@@ -179,17 +176,6 @@ const years = computed(() =>
     : []
 );
 
-/** The delta as shown, so "+0.0" isn't coloured as a rise. */
-function rounded(v: number) {
-  const f = Math.pow(10, info.value.decimals);
-  return Math.round(v * f) / f;
-}
-
-function signed(v: number) {
-  const r = rounded(v);
-  return `${r > 0 ? "+" : r < 0 ? "−" : "±"}${fixed(Math.abs(r), info.value.decimals)}`;
-}
-
 // --- swipe left/right (outside the chart) to change period ---
 
 let touchX = 0;
@@ -237,7 +223,7 @@ onUnmounted(() => clearTimeout(idleTimer));
       <section class="card main">
         <!-- Everything that controls the chart lives in its card, apart from the records. -->
         <div class="chart-head">
-          <Segmented :options="viewOptions" v-model="view" />
+          <Segmented inset :options="viewOptions" v-model="view" />
           <div class="nav" v-if="period">
             <button @click="step(-1)">‹</button>
             <span class="label">{{ period.label }}</span>
@@ -282,27 +268,9 @@ onUnmounted(() => clearTimeout(idleTimer));
       </section>
 
       <aside class="card side">
-        <template v-if="view === 'years'">
-          <h3>{{ t("yearlyAverage") }}</h3>
-          <div v-for="(y, i) in years.slice().reverse()" :key="y.year" class="year">
-            <i :style="{ background: yearColor(years.length - 1 - i, years.length, isLight) }" />
-            <span class="name">
-              {{ y.year }}<small v-if="y.partial">{{ y.partial }}</small>
-              <span v-for="e in eventsIn(y.year)" :key="e.id" class="year-event">
-                {{ e.label }} · {{ fmtDate(e.at, { day: "numeric", month: "short" }) }}
-              </span>
-            </span>
-            <strong>{{ y.avg === undefined ? "–" : fixed(y.avg, info.decimals) + info.unit }}</strong>
-            <span class="delta" :class="{ up: rounded(y.delta ?? 0) > 0, down: rounded(y.delta ?? 0) < 0 }">
-              {{ y.delta === undefined ? "" : signed(y.delta) }}
-            </span>
-          </div>
-          <p class="note">{{ t("yearlyNote") }}</p>
-        </template>
-        <template v-else>
-          <h3>{{ t("records") }}</h3>
-          <RecordsPanel :records="shownRecords" :info="info" />
-        </template>
+        <h3 class="section-title">{{ t(view === "years" ? "yearlyAverage" : "records") }}</h3>
+        <YearsPanel v-if="view === 'years'" :years="years" :info="info" :events="moduleEvents" />
+        <RecordsPanel v-else :records="shownRecords" :info="info" />
         <p v-if="module?.battery !== undefined" class="battery" :class="{ low: module.battery < 20 }">
           {{ t("batteryLevel", { n: module.battery }) }}
         </p>
@@ -324,22 +292,16 @@ onUnmounted(() => clearTimeout(idleTimer));
 
 <style scoped>
 .history {
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-direction: column;
   flex-direction: column;
   height: 100%;
   padding: 14px 20px 16px;
 }
 .top,
 .chart-head {
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-wrap: wrap;
   flex-wrap: wrap;
-  -webkit-align-items: center;
   align-items: center;
-  -webkit-justify-content: space-between;
   justify-content: space-between;
 }
 .top > *,
@@ -348,22 +310,6 @@ onUnmounted(() => clearTimeout(idleTimer));
 }
 .chart-head {
   padding-left: 12px;
-}
-/* Inside the card, the controls need the page background to stand out. */
-.chart-head :deep(.segmented),
-.chart-head .nav button {
-  background: var(--bg);
-}
-.chart-head :deep(.segmented button.active) {
-  background: var(--card);
-}
-button {
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-  -webkit-appearance: none;
 }
 .back {
   padding: 8px 14px 8px 4px;
@@ -378,22 +324,16 @@ button {
   color: var(--muted);
   font-size: 15px;
 }
-.year-event {
-  display: block;
-  font-size: 12px;
-  color: var(--warn);
-}
 .nav {
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: center;
   align-items: center;
 }
+/* Inside the card: the page background, like the inset period buttons next to them. */
 .nav button {
   width: 44px;
   height: 40px;
   border-radius: 10px;
-  background: var(--card);
+  background: var(--bg);
   font-size: 24px;
   line-height: 1;
 }
@@ -408,22 +348,14 @@ button {
 }
 
 .body {
-  -webkit-flex: 1;
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 300px;
   grid-gap: 16px;
 }
-.card {
-  border-radius: 18px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
-}
 .main {
-  display: -webkit-flex;
   display: flex;
-  -webkit-flex-direction: column;
   flex-direction: column;
   min-height: 0;
   padding: 16px 20px 12px 8px;
@@ -443,7 +375,6 @@ button {
   margin-right: 4px;
 }
 .chart-area {
-  -webkit-flex: 1;
   flex: 1;
   min-height: 0;
   position: relative;
@@ -460,61 +391,7 @@ button {
   overflow: auto;
 }
 h3 {
-  margin: 0 0 12px;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.year {
-  display: -webkit-flex;
-  display: flex;
-  -webkit-align-items: baseline;
-  align-items: baseline;
-  padding: 8px 0;
-  border-top: 1px solid var(--line);
-}
-.year i {
-  -webkit-flex: none;
-  flex: none;
-  width: 10px;
-  height: 10px;
-  margin-right: 10px;
-  border-radius: 50%;
-}
-.year .name {
-  -webkit-flex: 1;
-  flex: 1;
-  font-size: 17px;
-}
-.year small {
-  margin-left: 6px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.year strong {
-  font-size: 19px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.year .delta {
-  width: 60px;
-  text-align: right;
-  font-size: 14px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.delta.up {
-  color: #e8873a;
-}
-.delta.down {
-  color: #4a9fe8;
-}
-.note {
-  margin: 12px 0 0;
-  font-size: 12px;
-  color: var(--muted);
+  margin-bottom: 12px;
 }
 .battery {
   margin: 16px 0 0;
@@ -560,7 +437,6 @@ h3 {
     width: 100%;
   }
   .nav .label {
-    -webkit-flex: 1;
     flex: 1;
     min-width: 0;
     font-size: 16px;

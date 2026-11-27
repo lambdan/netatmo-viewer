@@ -145,7 +145,6 @@ svg {
 }
 .ticks span {
   position: absolute;
-  -webkit-transform: translateX(-50%);
   transform: translateX(-50%);
   font-size: 12px;
   color: var(--muted);

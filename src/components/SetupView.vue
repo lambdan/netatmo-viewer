@@ -27,7 +27,7 @@ async function submit() {
 
 <template>
   <div class="setup">
-    <div class="panel">
+    <div class="card panel">
       <template v-if="status.fromEnv">
         <h1>{{ t("rejected") }}</h1>
         <!-- The texts are our own (i18n.ts), with a little markup. -->
@@ -84,11 +84,8 @@ async function submit() {
 <style scoped>
 .setup {
   min-height: 100%;
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: center;
   align-items: center;
-  -webkit-justify-content: center;
   justify-content: center;
   padding: 24px 16px;
 }
@@ -96,9 +93,6 @@ async function submit() {
   width: 560px;
   max-width: 100%;
   padding: 28px 32px;
-  border-radius: 18px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
 }
 h1 {
   margin: 0 0 14px;
@@ -158,15 +152,11 @@ button {
   width: 100%;
   margin-top: 6px;
   padding: 13px;
-  border: 0;
   border-radius: 12px;
   background: var(--text);
   color: var(--bg);
-  font: inherit;
   font-size: 17px;
   font-weight: 600;
-  cursor: pointer;
-  -webkit-appearance: none;
 }
 button:disabled {
   opacity: 0.6;

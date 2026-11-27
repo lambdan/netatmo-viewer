@@ -50,19 +50,15 @@ const rows: { key: RecordPeriod; label: MessageKey; when: Intl.DateTimeFormatOpt
 <style scoped>
 .head,
 .row {
-  display: -webkit-flex;
   display: flex;
-  -webkit-align-items: baseline;
   align-items: baseline;
 }
 .head > span,
 .row > span {
-  -webkit-flex: 1;
   flex: 1;
 }
 .head > span:first-child,
 .row > .label {
-  -webkit-flex: 0 0 92px;
   flex: 0 0 92px;
 }
 .head {
