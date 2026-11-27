@@ -33,7 +33,8 @@ export interface FactInput {
 }
 
 const DAY_MS = 86400 * 1000;
-const dayNumber = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / DAY_MS;
+const dayNumber = (d: string) =>
+  Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / DAY_MS;
 const daysBetween = (a: string, b: string) => Math.round(dayNumber(b) - dayNumber(a));
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
@@ -50,7 +51,9 @@ function since(
   const v = days[todayIdx][pick];
   for (let i = todayIdx - 1; i >= 0; i--) {
     const x = days[i][pick];
-    if (lower ? x <= v : x >= v) return { day: days[i].day, gap: daysBetween(days[i].day, days[todayIdx].day) };
+    if (lower ? x <= v : x >= v) {
+      return { day: days[i].day, gap: daysBetween(days[i].day, days[todayIdx].day) };
+    }
   }
   return daysBetween(days[0].day, days[todayIdx].day) >= 365 ? "record" : undefined;
 }
@@ -143,16 +146,33 @@ export function computeFacts(input: FactInput): Fact[] {
           facts.push({ id: "warmestDate", vars: { md, n }, score: 80, icon: "📅" });
         }
       }
-      const lastYear = earlier.find((d) => d.day === addDays(today, -365) || d.day === addDays(today, -366));
+      const lastYear = earlier.find((d) =>
+        d.day === addDays(today, -365) || d.day === addDays(today, -366)
+      );
       if (lastYear && lastYear.day.slice(5) === md) {
-        facts.push({ id: "yearAgo", vars: { t: r1(lastYear.lo), t2: r1(lastYear.hi) }, score: 12, icon: "🗓️" });
+        facts.push({
+          id: "yearAgo",
+          vars: { t: r1(lastYear.lo), t2: r1(lastYear.hi) },
+          score: 12,
+          icon: "🗓️",
+        });
       }
       if (earlier.length >= 1 && !coldRecord && !warmRecord) {
         const coldest = earlier.reduce((a, b) => (b.lo < a.lo ? b : a));
         const warmest = earlier.reduce((a, b) => (b.hi > a.hi ? b : a));
         facts.push(
-          { id: "dateColdestWas", vars: { md, y: coldest.day.slice(0, 4), t: r1(coldest.lo) }, score: 9, icon: "📜" },
-          { id: "dateWarmestWas", vars: { md, y: warmest.day.slice(0, 4), t: r1(warmest.hi) }, score: 8, icon: "📜" },
+          {
+            id: "dateColdestWas",
+            vars: { md, y: coldest.day.slice(0, 4), t: r1(coldest.lo) },
+            score: 9,
+            icon: "📜",
+          },
+          {
+            id: "dateWarmestWas",
+            vars: { md, y: warmest.day.slice(0, 4), t: r1(warmest.hi) },
+            score: 8,
+            icon: "📜",
+          },
         );
       }
     }
@@ -178,9 +198,19 @@ export function computeFacts(input: FactInput): Fact[] {
         const diff = r1(now - usual);
         const m = +month;
         if (others.length >= 2 && others.every((o) => now < o)) {
-          facts.push({ id: "coldestStart", vars: { m, n: others.length + 1 }, score: 60, icon: "🧊" });
+          facts.push({
+            id: "coldestStart",
+            vars: { m, n: others.length + 1 },
+            score: 60,
+            icon: "🧊",
+          });
         } else if (others.length >= 2 && others.every((o) => now > o)) {
-          facts.push({ id: "warmestStart", vars: { m, n: others.length + 1 }, score: 60, icon: "🔥" });
+          facts.push({
+            id: "warmestStart",
+            vars: { m, n: others.length + 1 },
+            score: 60,
+            icon: "🔥",
+          });
         } else if (Math.abs(diff) >= 0.5) {
           facts.push({
             id: diff > 0 ? "monthWarmer" : "monthColder",
@@ -218,14 +248,17 @@ export function computeFacts(input: FactInput): Fact[] {
     }
     if (t && t.hi >= 25) {
       const n = streak(days, ti, (d) => d.hi >= 25);
-      if (n >= 2) facts.push({ id: "summerStreak", vars: { o: n, t: 25 }, score: 20 + n * 2, icon: "😎" });
+      if (n >= 2) {
+        facts.push({ id: "summerStreak", vars: { o: n, t: 25 }, score: 20 + n * 2, icon: "😎" });
+      }
     }
 
     // Frost nights this winter (from 1 July) vs last winter by the same date.
     const month = +today.slice(5, 7);
     if (month >= 9 || month <= 5) {
       const start = month >= 7 ? `${today.slice(0, 4)}-07-01` : `${+today.slice(0, 4) - 1}-07-01`;
-      const frost = (from: string, to: string) => days.filter((d) => d.day >= from && d.day <= to && d.lo < 0).length;
+      const frost = (from: string, to: string) =>
+        days.filter((d) => d.day >= from && d.day <= to && d.lo < 0).length;
       const n = frost(start, today);
       const lastStart = addDays(start, -365);
       if (n > 0) {
@@ -238,7 +271,9 @@ export function computeFacts(input: FactInput): Fact[] {
     // Inside vs outside.
     if (out.now !== undefined && input.indoor !== undefined) {
       const diff = r1(input.indoor - out.now);
-      if (diff >= 10) facts.push({ id: "insideWarmer", vars: { dt: diff }, score: 7 + diff / 4, icon: "🏠" });
+      if (diff >= 10) {
+        facts.push({ id: "insideWarmer", vars: { dt: diff }, score: 7 + diff / 4, icon: "🏠" });
+      }
     }
   }
 
@@ -254,7 +289,17 @@ export function computeFacts(input: FactInput): Fact[] {
   for (const h of input.humidity ?? []) {
     const i = h.days.length - 1;
     if (i < 0 || h.days[i].day !== today) continue;
-    sinceFact(facts, h.days, i, "lo", true, 30, "driestSince", { name: h.name, n: h.days[i].lo }, "🏜️");
+    sinceFact(
+      facts,
+      h.days,
+      i,
+      "lo",
+      true,
+      30,
+      "driestSince",
+      { name: h.name, n: h.days[i].lo },
+      "🏜️",
+    );
   }
 
   return facts.sort((a, b) => b.score - a.score);
@@ -272,7 +317,12 @@ function localDay(fmt: Intl.DateTimeFormat, unixSeconds: number): string {
 
 /** Loads what computeFacts needs from the archive. */
 export async function loadFacts(archive: Archive, modules: Module[], tz: string): Promise<Fact[]> {
-  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
   const now = Math.floor(Date.now() / 1000);
   const daily = async (id: string, metric: Metric): Promise<Day[]> =>
     (await archive.series(id, metric, 0, now + 1, 86400, tz)).map(([t, avg, lo, hi]) => ({
@@ -292,7 +342,14 @@ export async function loadFacts(archive: Archive, modules: Module[], tz: string)
       const [temp, latest, ago] = await Promise.all([
         daily(outdoor.id, "temperature"),
         archive.latest(outdoor.id),
-        archive.series(outdoor.id, "temperature", now - 24 * 3600 - 1800, now - 24 * 3600 + 1800, 300, tz),
+        archive.series(
+          outdoor.id,
+          "temperature",
+          now - 24 * 3600 - 1800,
+          now - 24 * 3600 + 1800,
+          300,
+          tz,
+        ),
       ]);
       // The reading closest to exactly 24 hours ago.
       const target = now - 24 * 3600;

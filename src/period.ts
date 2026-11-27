@@ -85,7 +85,13 @@ export function periodFor(kind: RangeKind, anchor: Date): Period {
       label = `${fmtDate(from, { day: "numeric", month: "short" })} – ${
         fmtDate(to - 1, { day: "numeric", month: "short", year: "numeric" })
       }`;
-      tipFormat = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" };
+      tipFormat = {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      };
       for (let i = 0; i < 7; i++) {
         const t = new Date(y, m, d + i);
         at(t, fmtDate(secs(t), { weekday: "short", day: "numeric" }), new Date(y, m, d + i, 12));
@@ -94,7 +100,13 @@ export function periodFor(kind: RangeKind, anchor: Date): Period {
     case "month":
       bucket = 3 * 3600;
       label = fmtDate(from, { month: "long", year: "numeric" });
-      tipFormat = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" };
+      tipFormat = {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      };
       for (const day of [5, 10, 15, 20, 25]) {
         const t = new Date(y, m, day);
         at(t, String(day));

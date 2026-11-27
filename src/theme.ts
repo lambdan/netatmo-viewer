@@ -17,7 +17,12 @@ export interface ThemeSettings {
 }
 
 const STORAGE_KEY = "netatmo-viewer.theme";
-const DEFAULTS: ThemeSettings = { mode: "auto", dayStart: "07:00", nightStart: "21:00", freezingLine: true, tempUnit: "C",
+const DEFAULTS: ThemeSettings = {
+  mode: "auto",
+  dayStart: "07:00",
+  nightStart: "21:00",
+  freezingLine: true,
+  tempUnit: "C",
   language: "auto",
 };
 

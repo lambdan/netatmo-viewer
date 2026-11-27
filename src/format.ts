@@ -93,7 +93,9 @@ export function direction(deg?: number): string {
 /** Locale formatted number with a fixed number of decimals. */
 export function fixed(v: number | undefined, decimals: number): string {
   if (v === undefined) return "–";
-  return numberFormat({ minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(v);
+  return numberFormat({ minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(
+    v,
+  );
 }
 
 export function fmtDate(unixSeconds: number, opts: Intl.DateTimeFormatOptions): string {

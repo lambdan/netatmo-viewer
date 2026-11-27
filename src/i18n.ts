@@ -117,7 +117,7 @@ const en = {
   pickDate: "Pick a date first",
   tickModule: "Tick at least one module",
   unknownModule: "Unknown module",
-  confirmDelete: "Delete \"{label}\"?",
+  confirmDelete: 'Delete "{label}"?',
   delete: "Delete",
 
   // Setup
@@ -128,7 +128,7 @@ const en = {
   savedRejected:
     "The saved login no longer works (the token may have been revoked). Enter it again below.",
   step1:
-    "Log in at <a href=\"https://dev.netatmo.com/apps\" target=\"_blank\">dev.netatmo.com/apps</a> with your Netatmo account and <b>create an app</b> (any name and description).",
+    'Log in at <a href="https://dev.netatmo.com/apps" target="_blank">dev.netatmo.com/apps</a> with your Netatmo account and <b>create an app</b> (any name and description).',
   step2: "Copy the app's <b>client ID</b> and <b>client secret</b>.",
   step3:
     "Under <b>Token generator</b>, choose the scope <code>read_station</code>, click <b>Generate Token</b> and copy the <b>refresh token</b>.",
@@ -237,7 +237,7 @@ const sv: Record<MessageKey, string> = {
   pickDate: "Välj ett datum först",
   tickModule: "Välj minst en modul",
   unknownModule: "Okänd modul",
-  confirmDelete: "Ta bort \"{label}\"?",
+  confirmDelete: 'Ta bort "{label}"?',
   delete: "Ta bort",
 
   rejected: "Netatmo godkände inte inloggningen",
@@ -247,7 +247,7 @@ const sv: Record<MessageKey, string> = {
   savedRejected:
     "Den sparade inloggningen fungerar inte längre (token kan ha återkallats). Fyll i den igen nedan.",
   step1:
-    "Logga in på <a href=\"https://dev.netatmo.com/apps\" target=\"_blank\">dev.netatmo.com/apps</a> med ditt Netatmo-konto och <b>skapa en app</b> (valfritt namn och beskrivning).",
+    'Logga in på <a href="https://dev.netatmo.com/apps" target="_blank">dev.netatmo.com/apps</a> med ditt Netatmo-konto och <b>skapa en app</b> (valfritt namn och beskrivning).',
   step2: "Kopiera appens <b>client ID</b> och <b>client secret</b>.",
   step3:
     "Under <b>Token generator</b>, välj scope <code>read_station</code>, klicka på <b>Generate Token</b> och kopiera <b>refresh token</b>.",
@@ -266,7 +266,7 @@ const messages: Record<Lang, Record<MessageKey, string>> = { en, sv };
 /** A text in the current language, with {name} placeholders filled in. */
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {
   let s = messages[lang()][key];
-  if (vars) for (const k in vars) s = s.split(`{${k}}`).join(String(vars[k]));
+  if (vars) { for (const k in vars) s = s.split(`{${k}}`).join(String(vars[k])); }
   return s;
 }
 

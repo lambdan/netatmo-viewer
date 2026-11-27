@@ -34,8 +34,9 @@ export const api = {
   updateEvent: (id: number, at: number, label: string, moduleIds: string[]) =>
     send<StationEvent>("PUT", `/api/events/${id}`, { at, label, moduleIds }),
   deleteEvent: (id: number) => send<{ ok: true }>("DELETE", `/api/events/${id}`),
-  history: (q: { module: string; metric: Metric; from: number; to: number; bucket: number; tz: string }) =>
-    get<SeriesResponse>("/api/history", q),
+  history: (
+    q: { module: string; metric: Metric; from: number; to: number; bucket: number; tz: string },
+  ) => get<SeriesResponse>("/api/history", q),
   records: (q: { module: string; metric: Metric; today: number; month: number; year: number }) =>
     get<RecordsResponse>("/api/records", q),
   monthly: (q: { module: string; metric: Metric; tz: string }) =>

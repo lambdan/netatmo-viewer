@@ -16,7 +16,10 @@ export interface YearTrend {
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-export function buildYears(rows: MonthlyResponse["months"], monthName: (m: number) => string): YearTrend[] {
+export function buildYears(
+  rows: MonthlyResponse["months"],
+  monthName: (m: number) => string,
+): YearTrend[] {
   // A month with less than half the samples of a typical month (e.g. the month the station was
   // set up, or a long outage) would skew averages, so it's drawn but not counted.
   const maxSamples = Math.max(0, ...rows.map((r) => r[3]));
@@ -47,7 +50,9 @@ export function buildYears(rows: MonthlyResponse["months"], monthName: (m: numbe
     const prev = i > 0 ? byYear.get(years[i - 1]) : undefined;
     if (prev) {
       const both = covered.filter((m) => prev.good[m] !== null);
-      if (both.length) t.delta = mean(both.map((m) => good[m]!)) - mean(both.map((m) => prev.good[m]!));
+      if (both.length) {
+        t.delta = mean(both.map((m) => good[m]!)) - mean(both.map((m) => prev.good[m]!));
+      }
     }
     return t;
   });
@@ -57,5 +62,7 @@ export function buildYears(rows: MonthlyResponse["months"], monthName: (m: numbe
 export function yearColor(index: number, count: number, light: boolean): string {
   const f = count <= 1 ? 1 : index / (count - 1);
   const hue = Math.round(210 - f * 185);
-  return light ? `hsl(${hue}, ${45 + f * 35}%, ${55 - f * 15}%)` : `hsl(${hue}, ${35 + f * 45}%, ${50 + f * 15}%)`;
+  return light
+    ? `hsl(${hue}, ${45 + f * 35}%, ${55 - f * 15}%)`
+    : `hsl(${hue}, ${35 + f * 45}%, ${50 + f * 15}%)`;
 }
