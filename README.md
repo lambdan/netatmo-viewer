@@ -147,3 +147,16 @@ DATABASE_URL=postgres://postgres:netatmo@localhost:5432/postgres deno run --env-
 
 `deno task typecheck` type-checks the Vue app, `deno task check` the server.
 `deno task build` builds the frontend into `dist/`, and `deno task start` serves it on its own.
+
+### Code layout
+
+- `shared/types.ts`: the API's shapes, used by both sides.
+- `server/main.ts` starts everything and routes HTTP. `station.ts` keeps the current readings
+  (polled from Netatmo via `netatmo.ts`, completed from the archive, plus Shelly sensors from
+  `shelly.ts`, which uses its own small `websocket.ts`). `sync.ts` copies history into the
+  archive (`db.ts`); `facts.ts` works out the fun facts.
+- `src/App.vue` is the home view (`ModuleCard`, `FactLine`); `HistoryView` is the history,
+  with `HistoryChart` and `TrendsChart` drawn on a shared `ChartFrame`, and `RecordsPanel` /
+  `YearsPanel` beside them. `SettingsPanel` and `EventsPanel` open in a `Modal`.
+- `settings.ts` holds what the settings panel saves on the device; `theme.ts` picks light or
+  dark, `units.ts` °C/°F, `i18n.ts` the texts, `format.ts` numbers and dates.
